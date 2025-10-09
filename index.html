@@ -11,27 +11,27 @@
 
     <div class="pokemon-container">
         <!--pokemon 1-->
-        <div class="pokemon-card">
+        <div class="pokemon-card" id="pokemon1">
             <input type="text" id="pokemonName1" placeholder="Enter first Pokémon">
             <button onclick="fetchPokemon('pokemonName1', 'pokemonSprite1', 'healthBar1', 'moves1', 'First Pokémon not found!')">Fetch Pokémon 1</button><br>
             <div class="sprite-hp-container">
                 <input type="text" id="healthBar1" readonly placeholder="HP" style="display: none;">
                 <img src="" alt="Pokemon Sprite" id="pokemonSprite1" style="display: none;">
             </div>
-            <div id="moves1" class="moves-container"></div> <!-- viser moves -->
-            <div id="stats1" class="stats-container"></div> <!-- viser stats -->
+            <div id="moves1" class="moves-container"></div>
+            <div id="stats1" class="stats-container"></div>
         </div>
 
         <!--pokemon 2-->
-        <div class="pokemon-card">
+        <div class="pokemon-card" id="pokemon2">
             <input type="text" id="pokemonName2" placeholder="Enter second Pokémon">
             <button onclick="fetchPokemon('pokemonName2', 'pokemonSprite2', 'healthBar2', 'moves2', 'Second Pokémon not found!')">Fetch Pokémon 2</button><br>
             <div class="sprite-hp-container">
                 <input type="text" id="healthBar2" readonly placeholder="HP will appear here" style="display: none;">
                 <img src="" alt="Pokemon Sprite" id="pokemonSprite2" style="display: none;">
             </div>
-            <div id="moves2" class="moves-container"></div> <!-- viser moves -->
-            <div id="stats2" class="stats-container"></div> <!-- viser stats -->
+            <div id="moves2" class="moves-container"></div>
+            <div id="stats2" class="stats-container"></div>
         </div>
     </div>
 

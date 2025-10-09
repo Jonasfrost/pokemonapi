@@ -1,5 +1,4 @@
-﻿body
-{
+﻿body {
 }
 
 .pokemon-container {
@@ -19,7 +18,7 @@
     border-radius: 10px;
     background: #f8f8f8;
     margin: 10px;
-    position: relative; /* positioning for children */
+    position: relative;
 }
 
 img {
@@ -42,7 +41,10 @@ input[readonly][id^="healthBar"] {
 /*popup til error*/
 .popup-overlay {
     position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: rgba(0,0,0,0.5);
     display: none;
     justify-content: center;
@@ -59,15 +61,15 @@ input[readonly][id^="healthBar"] {
     text-align: center;
 }
 
-.popup-box button {
-    margin-top: 15px;
-    padding: 8px 20px;
-    border: none;
-    background: #e74c3c;
-    color: #fff;
-    border-radius: 5px;
-    cursor: pointer;
-}
+    .popup-box button {
+        margin-top: 15px;
+        padding: 8px 20px;
+        border: none;
+        background: #e74c3c;
+        color: #fff;
+        border-radius: 5px;
+        cursor: pointer;
+    }
 
 healthBar {
     width: 300px;
@@ -89,20 +91,20 @@ healthBar {
     justify-content: center;
 }
 
-.moves-container button {
-padding: 8px 12px;
-background-color: #eee;
-border: 1px solid #888;
-border-radius: 6px;
-cursor: pointer;
-font-family: sans-serif;
-text-transform: capitalize;
-transition: 0.2s;
-}
+    .moves-container button {
+        padding: 8px 12px;
+        background-color: #eee;
+        border: 1px solid #888;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: sans-serif;
+        text-transform: capitalize;
+        transition: 0.2s;
+    }
 
-.moves-container button:hover {
-    background-color: #ddd;
-}
+        .moves-container button:hover {
+            background-color: #ddd;
+        }
 
 .sprite-hp-container {
     display: flex;
@@ -110,15 +112,15 @@ transition: 0.2s;
     align-items: center;
 }
 
-.sprite-hp-container input[type="text"] {
-    margin-bottom: 4px;
-    width: 120px;
-    text-align: center;
-    font-weight: bold;
-    background: #e0f7fa;
-    border: 1px solid #aaa;
-    border-radius: 6px;
-}
+    .sprite-hp-container input[type="text"] {
+        margin-bottom: 4px;
+        width: 120px;
+        text-align: center;
+        font-weight: bold;
+        background: #e0f7fa;
+        border: 1px solid #aaa;
+        border-radius: 6px;
+    }
 
 .type-container {
     position: static;
