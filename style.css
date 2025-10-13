@@ -82,6 +82,35 @@ healthBar {
     text-align: center;
 }
 
+/*random pokemon*/
+.random-pokemon {
+    display: block;
+    margin: 20px auto;
+    padding: 10px 20px;
+    font-size: 16px;
+    border: none;
+    border-radius: 6px;
+    background-color: #3498db;
+    color: white;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+    .random-pokemon button {
+        padding: 8px 12px;
+        font-size: 16px;
+        border: 1px solid #888;
+        border-radius: 6px;
+        background-color: #eee;
+        cursor: pointer;
+        font-family: sans-serif;
+        text-transform: capitalize;
+        transition: 0.2s;
+    }
+        .random-pokemon button:hover {
+            background-color: #ddd;
+        }
+    
+
 /*moves*/
 .moves-container {
     margin-top: 10px;

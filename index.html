@@ -35,6 +35,18 @@
         </div>
     </div>
 
+    <!--random pokemon-->
+    <div class="random-pokemon-container">
+        <button onclick="fetchRandomPokemon('pokemonName2', 'pokemonSprite2','healthBar2','moves2','Secound pokemon not found!')">Fetch Random Pokémon 2</button>
+        <div class="pokemon-card" id="randomPokemonCard" style="display: none;">
+            <h2 id="randomPokemonName"></h2>
+            <img src="" alt="Random Pokemon Sprite" id="randomPokemonSprite">
+            <div id="randomMoves" class="moves-container"></div>
+            <div id="randomStats" class="stats-container"></div>
+        </div>
+    </div>
+
+
     <!-- Popup -->
     <div id="popup" class="popup-overlay" style="display: none;">
         <div class="popup-box">
