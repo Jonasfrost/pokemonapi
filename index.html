@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PokeApi</title>
+    <title>Pokemon clash</title>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -35,9 +35,9 @@
         </div>
     </div>
 
-    <!--random pokemon-->
+    <!--random pokemon1-->
     <div class="random-pokemon-container">
-        <button onclick="fetchRandomPokemon('pokemonName2', 'pokemonSprite2','healthBar2','moves2','Secound pokemon not found!')">Fetch Random Pokémon 2</button>
+        <button onclick="fetchRandomPokemon('pokemonName1', 'pokemonSprite1','healthBar1','moves1','First pokemon not found!')">Fetch Random Pokémon 1</button>
         <div class="pokemon-card" id="randomPokemonCard" style="display: none;">
             <h2 id="randomPokemonName"></h2>
             <img src="" alt="Random Pokemon Sprite" id="randomPokemonSprite">
@@ -46,15 +46,25 @@
         </div>
     </div>
 
-
-    <!-- Popup -->
-    <div id="popup" class="popup-overlay" style="display: none;">
-        <div class="popup-box">
-            <p>Pokemon not found</p>
-            <button onclick="closePopup()">OK</button>
+        <!--random pokemon2-->
+        <div class="random-pokemon-container">
+            <button onclick="fetchRandomPokemon('pokemonName2', 'pokemonSprite2','healthBar2','moves2','Secound pokemon not found!')">Fetch Random Pokémon 2</button>
+            <div class="pokemon-card" id="randomPokemonCard" style="display: none;">
+                <h2 id="randomPokemonName"></h2>
+                <img src="" alt="Random Pokemon Sprite" id="randomPokemonSprite">
+                <div = id="randomMoves" class="moves-container"></div>
+                <div id="randomStats" class="stats-container"></div>
+            </div>
         </div>
-    </div>
 
-    <script src="index.js"></script>
+        <!-- Popup -->
+        <div id="popup" class="popup-overlay" style="display: none;">
+            <div class="popup-box">
+                <p>Pokemon not found</p>
+                <button onclick="closePopup()">OK</button>
+            </div>
+        </div>
+
+        <script src="index.js"></script>
 </body>
 </html>

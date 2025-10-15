@@ -1,4 +1,4 @@
-let currentHp1 = null, maxHp1 = null;
+Ôªølet currentHp1 = null, maxHp1 = null;
 let currentHp2 = null, maxHp2 = null;
 let stats1 = {}, stats2 = {};
 let types1 = [], types2 = []; // gemmer typer
@@ -12,7 +12,7 @@ function closePopup() {
     document.getElementById("popup").style.display = "none";
 }
 
-// Reset fainted PokÈmon
+// Reset fainted Pok√©mon
 function resetCard(num) {
     const card = document.getElementById(`pokemon${num}`);
     const input = document.getElementById(`pokemonName${num}`);
@@ -21,7 +21,6 @@ function resetCard(num) {
     if (num === 1) { currentHp1 = null; maxHp1 = null; stats1 = {}; types1 = []; }
     if (num === 2) { currentHp2 = null; maxHp2 = null; stats2 = {}; types2 = []; }
 
-    // Clear moves, stats, type display
     const moves = document.getElementById(`moves${num}`);
     const statsDiv = document.getElementById(`stats${num}`);
     const typeDiv = document.getElementById(`type${num}`);
@@ -36,19 +35,17 @@ function getRandomMoves(movesArray, count = 4) {
     return shuffled.slice(0, count);
 }
 
-//Ramdom pokemon
+// Random Pok√©mon
 async function fetchRandomPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
     try {
-        const randomId = Math.floor(Math.random() * 898) + 1; // PokÈmon IDs range from 1 to 898
+        const randomId = Math.floor(Math.random() * 1025) + 1;
         const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${randomId}`);
         if (!res.ok) {
-            showPopup(notFoundMsg); return;
+            showPopup(notFoundMsg);
+            return;
         }
         const data = await res.json();
-        // Set input value to the fetched PokÈmon's name
-        const input = document.getElementById(inputId);
-        input.value = data.name;
-        // Call the regular fetch function to handle the rest
+        document.getElementById(inputId).value = data.name;
         await fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg);
     } catch (err) {
         console.error(err);
@@ -56,11 +53,10 @@ async function fetchRandomPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg)
     }
 }
 
-
 // Stat calculation
 function calculateStat(base, level = 50, iv = 31, ev = 0, isHP = false) {
     if (isHP) return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + level + 10;
-    else return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
+    return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
 }
 
 // Update HP bar
@@ -71,90 +67,71 @@ function updateHpBar(hpBarId, current, max) {
 
 // Damage formula
 function calculateDamage(level, attackStat, attackPower, defenseStat, stab = 1, typeEffectiveness = 1) {
-    const randomFactor = Math.floor(Math.random() * (100 - 85 + 1)) + 85; // 85ñ100%
+    const randomFactor = Math.floor(Math.random() * (100 - 85 + 1)) + 85;
     const baseDamage = (((((2 * level) / 5 + 2) * attackStat * attackPower / defenseStat) / 50) + 2);
     return Math.floor(baseDamage * stab * typeEffectiveness * randomFactor / 100);
 }
 
-// Type effectiveness check
+// Type effectiveness
 async function getTypeEffectiveness(moveType, defenderTypes) {
     const res = await fetch(`https://pokeapi.co/api/v2/type/${moveType}`);
     const data = await res.json();
-
     let multiplier = 1;
     defenderTypes.forEach(defType => {
         if (data.damage_relations.double_damage_to.some(t => t.name === defType)) multiplier *= 2;
         if (data.damage_relations.half_damage_to.some(t => t.name === defType)) multiplier *= 0.5;
         if (data.damage_relations.no_damage_to.some(t => t.name === defType)) multiplier *= 0;
     });
-
     return multiplier;
 }
 
-// Render moves with STAB + type effectiveness
+// Render moves
 async function renderMoves(containerId, moves) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
-
     const isPoke1 = containerId === 'moves1';
     const opponentNum = isPoke1 ? 2 : 1;
 
-    for (const move of moves)
-    {
+    for (const move of moves) {
         const moveRes = await fetch(move.move.url);
         const moveDetails = await moveRes.json();
         const power = moveDetails.power;
         const moveType = moveDetails.type.name;
 
         const button = document.createElement("button");
-        button.textContent = move.move.name;
+        button.innerHTML = `<strong>${move.move.name}</strong><br><small>Power: ${power ?? 'N/A'}</small>`;
         button.onclick = async () => {
-            //til udregning af skade
-            if (typeof power === 'number' && power > 0)
-            {
+            if (typeof power === 'number' && power > 0) {
                 const attackerStats = isPoke1 ? stats1 : stats2;
                 const defenderStats = isPoke1 ? stats2 : stats1;
                 const attackerTypes = isPoke1 ? types1 : types2;
                 const defenderTypes = isPoke1 ? types2 : types1;
 
-                if (!attackerStats.attack || !defenderStats.defense)
-                {
+                if (!attackerStats.attack || !defenderStats.defense) {
                     alert("Stats not ready yet!");
                     return;
                 }
 
-                // STAB move type matches PokÈmon type
                 const stab = attackerTypes.includes(moveType) ? 1.5 : 1;
-
-                // Type effectiveness
                 const typeEffectiveness = await getTypeEffectiveness(moveType, defenderTypes);
-
                 const damage = calculateDamage(50, attackerStats.attack, power, defenderStats.defense, stab, typeEffectiveness);
 
-                //fainted pokemon
-                if (opponentNum === 2 && currentHp2 !== null)
-                {
+                if (opponentNum === 2 && currentHp2 !== null) {
                     currentHp2 = Math.max(0, currentHp2 - damage);
                     updateHpBar('healthBar2', currentHp2, maxHp2);
-                    if (currentHp2 === 0)
-                    {
+                    if (currentHp2 === 0) {
                         resetCard(2);
-                        showPopup("pokemon 1 won")
+                        showPopup("Pokemon 1 won!");
                     }
-                }
-                else if (opponentNum === 1 && currentHp1 !== null)
-                {
+                } else if (opponentNum === 1 && currentHp1 !== null) {
                     currentHp1 = Math.max(0, currentHp1 - damage);
                     updateHpBar('healthBar1', currentHp1, maxHp1);
-                    if (currentHp1 === 0)
-                    {
+                    if (currentHp1 === 0) {
                         resetCard(1);
-                        showPopup("pokemon 2 won")
+                        showPopup("Pokemon 2 won!");
                     }
                 }
-            }
-            else
-            {
+            } else {
                 alert(`Used move: ${move.move.name} (no damage)`);
             }
         };
@@ -162,16 +139,31 @@ async function renderMoves(containerId, moves) {
     }
 }
 
-// Fetch PokÈmon and stats
+//  Automatically compare speed
+function showFasterPokemon() {
+    if (stats1.speed && stats2.speed) {
+        if (stats1.speed > stats2.speed) {
+            showPopup(`${document.getElementById('pokemonName1').value} is faster! pokemon 1 starts`);
+        } else if (stats2.speed > stats1.speed) {
+            showPopup(`${document.getElementById('pokemonName2').value} is faster! pokemon 2 starts`);
+        } else {
+            showPopup(`Both Pok√©mon have the same speed: ${stats1.speed}`);
+        }
+    }
+}
+
+// Fetch Pok√©mon
 async function fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
     try {
         const pokemonName = document.getElementById(inputId).value.trim().toLowerCase();
         if (!pokemonName) return;
+
         const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonName}`);
-        if (!res.ok)
-        {
-            showPopup(notFoundMsg); return;
+        if (!res.ok) {
+            showPopup(notFoundMsg);
+            return;
         }
+
         const data = await res.json();
 
         // Sprite
@@ -207,22 +199,18 @@ async function fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
             statsAt50[name] = calculateStat(base, level, iv, ev, name === "hp");
         });
 
-        if (hpBarId === 'healthBar1')
-        {
+        if (hpBarId === 'healthBar1') {
             currentHp1 = hpAt50; maxHp1 = hpAt50; stats1 = statsAt50;
             types1 = data.types.map(t => t.type.name);
-        }
-        else
-        {
+        } else {
             currentHp2 = hpAt50; maxHp2 = hpAt50; stats2 = statsAt50;
             types2 = data.types.map(t => t.type.name);
         }
 
-        // Display types
+        // Type
         const typeId = inputId === 'pokemonName1' ? 'type1' : 'type2';
         let typeDiv = document.getElementById(typeId);
-        if (!typeDiv)
-        {
+        if (!typeDiv) {
             typeDiv = document.createElement('div');
             typeDiv.id = typeId;
             typeDiv.className = 'type-container';
@@ -232,7 +220,7 @@ async function fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
         typeDiv.innerHTML = `<strong>Type:</strong> ${data.types.map(t => t.type.name).join(' / ')}`;
         typeDiv.style.display = 'block';
 
-        // Display stats
+        // Stats display
         const statsId = inputId === 'pokemonName1' ? 'stats1' : 'stats2';
         const statsDiv = document.getElementById(statsId);
         statsDiv.innerHTML = `<strong>Stats (Level 50):</strong><br>` +
@@ -243,9 +231,13 @@ async function fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
         const moves = getRandomMoves(data.moves, 4);
         await renderMoves(movesId, moves);
 
+        // Automatically show faster Pok√©mon when both stats are ready
+        if (stats1.speed && stats2.speed) {
+            showFasterPokemon();
+        }
+
     } catch (err) {
         console.error(err);
         showPopup("Something went wrong while fetching data.");
     }
 }
-console.log("Simon was here");
