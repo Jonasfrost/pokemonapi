@@ -1,78 +1,42 @@
-﻿let currentHp1 = null, maxHp1 = null;
-let currentHp2 = null, maxHp2 = null;
+﻿// ========================
+// GLOBAL VARIABLES
+// ========================
+let team1 = [], team2 = [];
+let currentPoke1 = null, currentPoke2 = null;
+let currentHp1 = 0, maxHp1 = 0;
+let currentHp2 = 0, maxHp2 = 0;
 let stats1 = {}, stats2 = {};
-let types1 = [], types2 = []; // gemmer typer
+let types1 = [], types2 = [];
+let selectedMove1 = null, selectedMove2 = null;
+let waitingForMove = false;
 
-// Popup functions
-function showPopup(message = "Pokemon not found!") {
-    document.querySelector(".popup-box p").textContent = message;
+// POPUP
+function showPopup(msg = "Pokemon not found!") {
+    document.querySelector(".popup-box p").textContent = msg;
     document.getElementById("popup").style.display = "flex";
 }
-function closePopup() {
-    document.getElementById("popup").style.display = "none";
-}
+function closePopup() { document.getElementById("popup").style.display = "none"; }
 
-// Reset fainted Pokémon
-function resetCard(num) {
-    const card = document.getElementById(`pokemon${num}`);
-    const input = document.getElementById(`pokemonName${num}`);
-    if (card) card.style.display = "none";
-    if (input) input.value = "";
-    if (num === 1) { currentHp1 = null; maxHp1 = null; stats1 = {}; types1 = []; }
-    if (num === 2) { currentHp2 = null; maxHp2 = null; stats2 = {}; types2 = []; }
-
-    const moves = document.getElementById(`moves${num}`);
-    const statsDiv = document.getElementById(`stats${num}`);
-    const typeDiv = document.getElementById(`type${num}`);
-    if (moves) moves.innerHTML = "";
-    if (statsDiv) { statsDiv.innerHTML = ""; statsDiv.style.display = "none"; }
-    if (typeDiv) { typeDiv.innerHTML = ""; typeDiv.style.display = "none"; }
-}
-
-// Random moves
-function getRandomMoves(movesArray, count = 4) {
-    const shuffled = movesArray.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-}
-
-// Random Pokémon
-async function fetchRandomPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
-    try {
-        const randomId = Math.floor(Math.random() * 1025) + 1;
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${randomId}`);
-        if (!res.ok) {
-            showPopup(notFoundMsg);
-            return;
-        }
-        const data = await res.json();
-        document.getElementById(inputId).value = data.name;
-        await fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg);
-    } catch (err) {
-        console.error(err);
-        showPopup("Something went wrong while fetching data.");
-    }
-}
-
-// Stat calculation
+// STATS
 function calculateStat(base, level = 50, iv = 31, ev = 0, isHP = false) {
     if (isHP) return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + level + 10;
     return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
 }
 
-// Update HP bar
+// HP BAR
 function updateHpBar(hpBarId, current, max) {
     const bar = document.getElementById(hpBarId);
     bar.value = `HP: ${current} / ${max}`;
 }
 
-// Damage formula
-function calculateDamage(level, attackStat, attackPower, defenseStat, stab = 1, typeEffectiveness = 1) {
+// DAMAGE
+function calculateDamage(level, attackStat, power, defenseStat, stab = 1, typeEffectiveness = 1) {
     const randomFactor = Math.floor(Math.random() * (100 - 85 + 1)) + 85;
-    const baseDamage = (((((2 * level) / 5 + 2) * attackStat * attackPower / defenseStat) / 50) + 2);
+    const baseDamage = ((((2 * level) / 5 + 2) * attackStat * power / defenseStat) / 50) + 2;
     return Math.floor(baseDamage * stab * typeEffectiveness * randomFactor / 100);
 }
 
-// Type effectiveness
+// TYPE EFFECTIVENESS
 async function getTypeEffectiveness(moveType, defenderTypes) {
     const res = await fetch(`https://pokeapi.co/api/v2/type/${moveType}`);
     const data = await res.json();
@@ -85,12 +49,104 @@ async function getTypeEffectiveness(moveType, defenderTypes) {
     return multiplier;
 }
 
-// Render moves
+// RANDOM MOVES
+function getRandomMoves(movesArray, count = 4) {
+    const shuffled = movesArray.sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+}
+
+// FETCH POKEMON
+async function fetchPokemonObject(name) {
+    try {
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const level = 50, iv = 31, ev = 0;
+        const stats = {};
+        data.stats.forEach(statObj => {
+            stats[statObj.stat.name] = calculateStat(statObj.base_stat, level, iv, ev, statObj.stat.name === 'hp');
+        });
+        const hp = stats.hp;
+        return {
+            name: data.name,
+            sprite: data.sprites.front_default,
+            stats,
+            types: data.types.map(t => t.type.name),
+            hpCurrent: hp,
+            hpMax: hp,
+            moves: getRandomMoves(data.moves, 4)
+        };
+    } catch { return null; }
+}
+
+// RANDOMIZE TEAM
+async function randomizeTeam(player) {
+    for (let i = 1; i <= 6; i++) {
+        const randomId = Math.floor(Math.random() * 1025) + 1;
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${randomId}`);
+        if (!res.ok) continue;
+        const data = await res.json();
+        document.getElementById(`team${player}-poke${i}`).value = data.name;
+    }
+}
+
+// SUBMIT TEAM
+async function submitTeam(player) {
+    const team = [];
+    for (let i = 1; i <= 6; i++) {
+        const input = document.getElementById(`team${player}-poke${i}`);
+        const name = input.value.trim().toLowerCase();
+        if (!name) continue;
+        const poke = await fetchPokemonObject(name);
+        if (poke) team.push(poke);
+    }
+    if (team.length === 0) {
+        showPopup(`Player ${player} must choose at least 1 Pokémon!`);
+        return;
+    }
+    if (player === 1) { team1 = team; document.getElementById('team1-selection').style.display = 'none'; }
+    else { team2 = team; document.getElementById('team2-selection').style.display = 'none'; }
+
+    if (team1.length && team2.length) startBattle();
+}
+
+// START BATTLE
+function startBattle() {
+    document.getElementById('battle-container').style.display = 'flex';
+    currentPoke1 = team1.shift();
+    currentPoke2 = team2.shift();
+    loadActivePokemon(1, currentPoke1);
+    loadActivePokemon(2, currentPoke2);
+}
+
+// LOAD ACTIVE POKEMON
+function loadActivePokemon(player, poke) {
+    const hpBar = document.getElementById(`healthBar${player}`);
+    const sprite = document.getElementById(`pokemonSprite${player}`);
+    const statsDiv = document.getElementById(`stats${player}`);
+    const typeDiv = document.getElementById(`type${player}`);
+    const movesContainer = document.getElementById(`moves${player}`);
+
+    if (player === 1) { currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types; }
+    else { currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types; }
+
+    hpBar.value = `HP: ${poke.hpCurrent} / ${poke.hpMax}`;
+    hpBar.style.display = 'block';
+    sprite.src = poke.sprite; sprite.style.display = 'block';
+
+    statsDiv.innerHTML = Object.entries(poke.stats).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join('<br>');
+    statsDiv.style.display = 'block';
+    typeDiv.innerHTML = `Type: ${poke.types.join(' / ')}`; typeDiv.style.display = 'block';
+
+    renderMoves(movesContainer.id, poke.moves);
+}
+
+// RENDER MOVES
 async function renderMoves(containerId, moves) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
+
     const isPoke1 = containerId === 'moves1';
-    const opponentNum = isPoke1 ? 2 : 1;
 
     for (const move of moves) {
         const moveRes = await fetch(move.move.url);
@@ -100,144 +156,103 @@ async function renderMoves(containerId, moves) {
 
         const button = document.createElement("button");
         button.innerHTML = `<strong>${move.move.name}</strong><br><small>Power: ${power ?? 'N/A'}</small>`;
+
         button.onclick = async () => {
-            if (typeof power === 'number' && power > 0) {
-                const attackerStats = isPoke1 ? stats1 : stats2;
-                const defenderStats = isPoke1 ? stats2 : stats1;
-                const attackerTypes = isPoke1 ? types1 : types2;
-                const defenderTypes = isPoke1 ? types2 : types1;
-
-                if (!attackerStats.attack || !defenderStats.defense) {
-                    alert("Stats not ready yet!");
-                    return;
-                }
-
-                const stab = attackerTypes.includes(moveType) ? 1.5 : 1;
-                const typeEffectiveness = await getTypeEffectiveness(moveType, defenderTypes);
-                const damage = calculateDamage(50, attackerStats.attack, power, defenderStats.defense, stab, typeEffectiveness);
-
-                if (opponentNum === 2 && currentHp2 !== null) {
-                    currentHp2 = Math.max(0, currentHp2 - damage);
-                    updateHpBar('healthBar2', currentHp2, maxHp2);
-                    if (currentHp2 === 0) {
-                        resetCard(2);
-                        showPopup("Pokemon 1 won!");
-                    }
-                } else if (opponentNum === 1 && currentHp1 !== null) {
-                    currentHp1 = Math.max(0, currentHp1 - damage);
-                    updateHpBar('healthBar1', currentHp1, maxHp1);
-                    if (currentHp1 === 0) {
-                        resetCard(1);
-                        showPopup("Pokemon 2 won!");
-                    }
-                }
-            } else {
-                alert(`Used move: ${move.move.name} (no damage)`);
+            if (typeof power !== 'number' || power <= 0)
+            {
+                alert(`${move.move.name} does no damage.`); return;
             }
+            if (isPoke1) selectedMove1 = { move, moveType, power };
+            else selectedMove2 = { move, moveType, power };
+
+            button.classList.add("selected-move");
+            container.querySelectorAll("button").forEach(btn => { if (btn !== button) btn.disabled = true; });
+
+            if (selectedMove1 && selectedMove2) await executeTurn();
         };
         container.appendChild(button);
     }
 }
 
-//  Automatically compare speed
-function showFasterPokemon() {
-    if (stats1.speed && stats2.speed) {
-        if (stats1.speed > stats2.speed) {
-            showPopup(`${document.getElementById('pokemonName1').value} is faster! pokemon 1 starts`);
-        } else if (stats2.speed > stats1.speed) {
-            showPopup(`${document.getElementById('pokemonName2').value} is faster! pokemon 2 starts`);
-        } else {
-            showPopup(`Both Pokémon have the same speed: ${stats1.speed}`);
-        }
-    }
+// EXECUTE TURN
+async function executeTurn() {
+    const firstIsPoke1 = stats1.speed >= stats2.speed;
+    const firstMove = firstIsPoke1 ? selectedMove1 : selectedMove2;
+    const secondMove = firstIsPoke1 ? selectedMove2 : selectedMove1;
+    await attack(firstIsPoke1 ? 1 : 2, firstMove);
+    if (currentHp1 > 0 && currentHp2 > 0) await attack(firstIsPoke1 ? 2 : 1, secondMove);
+
+    selectedMove1 = null; selectedMove2 = null;
+    renderMoves('moves1', currentPoke1.moves);
+    renderMoves('moves2', currentPoke2.moves);
 }
 
-// Fetch Pokémon
-async function fetchPokemon(inputId, imgId, hpBarId, movesId, notFoundMsg) {
-    try {
-        const pokemonName = document.getElementById(inputId).value.trim().toLowerCase();
-        if (!pokemonName) return;
+// ATTACK FUNCTION
+async function attack(player, move) {
+    const attackerStats = player === 1 ? stats1 : stats2;
+    const defenderStats = player === 1 ? stats2 : stats1;
+    const attackerTypes = player === 1 ? types1 : types2;
+    const defenderTypes = player === 1 ? types2 : types1;
+    const defenderHp = player === 1 ? currentHp2 : currentHp1;
 
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemonName}`);
-        if (!res.ok) {
-            showPopup(notFoundMsg);
-            return;
+    const stab = attackerTypes.includes(move.moveType) ? 1.5 : 1;
+    const typeEffectiveness = await getTypeEffectiveness(move.moveType, defenderTypes);
+    const damage = calculateDamage(50, attackerStats.attack, move.power, defenderStats.defense, stab, typeEffectiveness);
+
+    if (player === 1) { currentHp2 = Math.max(0, currentHp2 - damage); updateHpBar('healthBar2', currentHp2, maxHp2); if (currentHp2 === 0) switchNextPokemon(2); }
+    else { currentHp1 = Math.max(0, currentHp1 - damage); updateHpBar('healthBar1', currentHp1, maxHp1); if (currentHp1 === 0) switchNextPokemon(1); }
+}
+ 
+// SWITCH TO NEXT POKEMON AFTER FAINT
+function switchNextPokemon(player) {
+    if (player === 1 && team1.length > 0) { currentPoke1 = team1.shift(); loadActivePokemon(1, currentPoke1); }
+    else if (player === 2 && team2.length > 0) { currentPoke2 = team2.shift(); loadActivePokemon(2, currentPoke2); }
+    else showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
+}
+function showSwitchMenu(player) {
+    const menu = document.getElementById(`switch-menu${player}`);
+    menu.innerHTML = '';
+    const team = player === 1 ? team1 : team2;
+
+    team.forEach((poke, index) => {
+        if (poke.hpCurrent > 0) { // only show alive Pokémon
+            const btn = document.createElement('button');
+            btn.textContent = poke.name;
+            btn.onclick = () => {
+                switchActivePokemon(player, index);
+                menu.style.display = 'none';
+            };
+            menu.appendChild(btn);
         }
+    });
 
-        const data = await res.json();
+    menu.style.display = 'block';
+}
 
-        // Sprite
-        const img = document.getElementById(imgId);
-        img.src = data.sprites.front_default;
-        img.style.display = "block";
+// SWITCH ACTIVE POKEMON
+function switchActivePokemon(player, teamIndex) {
+    const team = player === 1 ? team1 : team2;
+    const newPoke = team.splice(teamIndex, 1)[0]; // remove from team array
+    const oldPoke = player === 1 ? currentPoke1 : currentPoke2;
 
-        // Name
-        const card = document.getElementById(inputId).closest('.pokemon-card');
-        const spriteHpContainer = card.querySelector('.sprite-hp-container');
-        let nameDiv = spriteHpContainer.querySelector('.pokemon-name');
-        if (!nameDiv) {
-            nameDiv = document.createElement('div');
-            nameDiv.className = 'pokemon-name';
-            spriteHpContainer.insertBefore(nameDiv, spriteHpContainer.firstChild);
-        }
-        nameDiv.textContent = data.name.charAt(0).toUpperCase() + data.name.slice(1);
-        nameDiv.style.display = 'block';
+    // push old active Pokémon back to team (if it still has HP)
+    if ((player === 1 ? currentHp1 : currentHp2) > 0) team.push(oldPoke);
 
-        // HP
-        const hpBase = data.stats.find(stat => stat.stat.name === "hp")?.base_stat || 0;
-        const hpAt50 = calculateStat(hpBase, 50, 31, 0, true);
-        const healthBar = document.getElementById(hpBarId);
-        healthBar.value = `HP: ${hpAt50} / ${hpAt50}`;
-        healthBar.style.display = "block";
-
-        // Stats
-        const level = 50, iv = 31, ev = 0;
-        const statsAt50 = {};
-        data.stats.forEach(statObj => {
-            const base = statObj.base_stat;
-            const name = statObj.stat.name;
-            statsAt50[name] = calculateStat(base, level, iv, ev, name === "hp");
-        });
-
-        if (hpBarId === 'healthBar1') {
-            currentHp1 = hpAt50; maxHp1 = hpAt50; stats1 = statsAt50;
-            types1 = data.types.map(t => t.type.name);
-        } else {
-            currentHp2 = hpAt50; maxHp2 = hpAt50; stats2 = statsAt50;
-            types2 = data.types.map(t => t.type.name);
-        }
-
-        // Type
-        const typeId = inputId === 'pokemonName1' ? 'type1' : 'type2';
-        let typeDiv = document.getElementById(typeId);
-        if (!typeDiv) {
-            typeDiv = document.createElement('div');
-            typeDiv.id = typeId;
-            typeDiv.className = 'type-container';
-            const hpBarEl = spriteHpContainer.querySelector('input[type="text"]');
-            spriteHpContainer.insertBefore(typeDiv, hpBarEl.nextSibling);
-        }
-        typeDiv.innerHTML = `<strong>Type:</strong> ${data.types.map(t => t.type.name).join(' / ')}`;
-        typeDiv.style.display = 'block';
-
-        // Stats display
-        const statsId = inputId === 'pokemonName1' ? 'stats1' : 'stats2';
-        const statsDiv = document.getElementById(statsId);
-        statsDiv.innerHTML = `<strong>Stats (Level 50):</strong><br>` +
-            Object.entries(statsAt50).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join('<br>');
-        statsDiv.style.display = 'block';
-
-        // Moves
-        const moves = getRandomMoves(data.moves, 4);
-        await renderMoves(movesId, moves);
-
-        // Automatically show faster Pokémon when both stats are ready
-        if (stats1.speed && stats2.speed) {
-            showFasterPokemon();
-        }
-
-    } catch (err) {
-        console.error(err);
-        showPopup("Something went wrong while fetching data.");
+    // set new active Pokémon
+    if (player === 1) {
+        currentPoke1 = newPoke;
+        currentHp1 = newPoke.hpCurrent;
+        maxHp1 = newPoke.hpMax;
+        stats1 = newPoke.stats;
+        types1 = newPoke.types;
+        loadActivePokemon(1, newPoke);
+    } else {
+        currentPoke2 = newPoke;
+        currentHp2 = newPoke.hpCurrent;
+        maxHp2 = newPoke.hpMax;
+        stats2 = newPoke.stats;
+        types2 = newPoke.types;
+        loadActivePokemon(2, newPoke);
     }
 }
+console.log("Simon was here")

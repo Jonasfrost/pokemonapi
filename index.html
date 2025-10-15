@@ -1,70 +1,88 @@
 ﻿<!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="utf-8">
+    <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pokemon clash</title>
+    <title>Pokemon Team Battle</title>
     <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
 
-    <div class="pokemon-container">
-        <!--pokemon 1-->
+    <!-- TEAM SELECTION PHASE -->
+    <div class="team-selection" id="team1-selection">
+        <h2>Choose your Team (Player 1)</h2>
+        <div id="team1-inputs">
+            <input type="text" placeholder="Pokémon 1" id="team1-poke1">
+            <input type="text" placeholder="Pokémon 2" id="team1-poke2">
+            <input type="text" placeholder="Pokémon 3" id="team1-poke3">
+            <input type="text" placeholder="Pokémon 4" id="team1-poke4">
+            <input type="text" placeholder="Pokémon 5" id="team1-poke5">
+            <input type="text" placeholder="Pokémon 6" id="team1-poke6">
+        </div>
+        <button onclick="submitTeam(1)">Confirm Team</button>
+        <button onclick="randomizeTeam(1)">Randomize Team</button>
+    </div>
+
+    <div class="team-selection" id="team2-selection">
+        <h2>Choose your Team (Player 2)</h2>
+        <div id="team2-inputs">
+            <input type="text" placeholder="Pokémon 1" id="team2-poke1">
+            <input type="text" placeholder="Pokémon 2" id="team2-poke2">
+            <input type="text" placeholder="Pokémon 3" id="team2-poke3">
+            <input type="text" placeholder="Pokémon 4" id="team2-poke4">
+            <input type="text" placeholder="Pokémon 5" id="team2-poke5">
+            <input type="text" placeholder="Pokémon 6" id="team2-poke6">
+        </div>
+        <button onclick="submitTeam(2)">Confirm Team</button>
+        <button onclick="randomizeTeam(2)">Randomize Team</button>
+    </div>
+
+    <!-- BATTLE PHASE -->
+    <div class="pokemon-container" id="battle-container" style="display:none;">
+        <!-- Pokémon 1 -->
         <div class="pokemon-card" id="pokemon1">
-            <input type="text" id="pokemonName1" placeholder="Enter first Pokémon">
-            <button onclick="fetchPokemon('pokemonName1', 'pokemonSprite1', 'healthBar1', 'moves1', 'First Pokémon not found!')">Fetch Pokémon 1</button><br>
             <div class="sprite-hp-container">
-                <input type="text" id="healthBar1" readonly placeholder="HP" style="display: none;">
-                <img src="" alt="Pokemon Sprite" id="pokemonSprite1" style="display: none;">
+                <input type="text" id="healthBar1" readonly placeholder="HP" style="display:none;">
+                <img src="" alt="Pokemon Sprite" id="pokemonSprite1" style="display:none;">
             </div>
             <div id="moves1" class="moves-container"></div>
             <div id="stats1" class="stats-container"></div>
+            <div id="type1" class="type-container"></div>
+
+            <!-- SWITCH BUTTON FOR PLAYER 1 -->
+            <div id="switch-container1" style="text-align:center; margin-top:10px;">
+                <button onclick="showSwitchMenu(1)">Switch Pokémon</button>
+                <div id="switch-menu1" style="display:none; margin-top:5px;"></div>
+            </div>
         </div>
 
-        <!--pokemon 2-->
+        <!-- Pokémon 2 -->
         <div class="pokemon-card" id="pokemon2">
-            <input type="text" id="pokemonName2" placeholder="Enter second Pokémon">
-            <button onclick="fetchPokemon('pokemonName2', 'pokemonSprite2', 'healthBar2', 'moves2', 'Second Pokémon not found!')">Fetch Pokémon 2</button><br>
             <div class="sprite-hp-container">
-                <input type="text" id="healthBar2" readonly placeholder="HP will appear here" style="display: none;">
-                <img src="" alt="Pokemon Sprite" id="pokemonSprite2" style="display: none;">
+                <input type="text" id="healthBar2" readonly placeholder="HP" style="display:none;">
+                <img src="" alt="Pokemon Sprite" id="pokemonSprite2" style="display:none;">
             </div>
             <div id="moves2" class="moves-container"></div>
             <div id="stats2" class="stats-container"></div>
+            <div id="type2" class="type-container"></div>
+
+            <!-- SWITCH BUTTON FOR PLAYER 2 -->
+            <div id="switch-container2" style="text-align:center; margin-top:10px;">
+                <button onclick="showSwitchMenu(2)">Switch Pokémon</button>
+                <div id="switch-menu2" style="display:none; margin-top:5px;"></div>
+            </div>
         </div>
     </div>
 
-    <!--random pokemon1-->
-    <div class="random-pokemon-container">
-        <button onclick="fetchRandomPokemon('pokemonName1', 'pokemonSprite1','healthBar1','moves1','First pokemon not found!')">Fetch Random Pokémon 1</button>
-        <div class="pokemon-card" id="randomPokemonCard" style="display: none;">
-            <h2 id="randomPokemonName"></h2>
-            <img src="" alt="Random Pokemon Sprite" id="randomPokemonSprite">
-            <div id="randomMoves" class="moves-container"></div>
-            <div id="randomStats" class="stats-container"></div>
+
+    <!-- Popup -->
+    <div id="popup" class="popup-overlay" style="display:none;">
+        <div class="popup-box">
+            <p>Pokemon not found</p>
+            <button onclick="closePopup()">OK</button>
         </div>
     </div>
 
-        <!--random pokemon2-->
-        <div class="random-pokemon-container">
-            <button onclick="fetchRandomPokemon('pokemonName2', 'pokemonSprite2','healthBar2','moves2','Secound pokemon not found!')">Fetch Random Pokémon 2</button>
-            <div class="pokemon-card" id="randomPokemonCard" style="display: none;">
-                <h2 id="randomPokemonName"></h2>
-                <img src="" alt="Random Pokemon Sprite" id="randomPokemonSprite">
-                <div = id="randomMoves" class="moves-container"></div>
-                <div id="randomStats" class="stats-container"></div>
-            </div>
-        </div>
-
-        <!-- Popup -->
-        <div id="popup" class="popup-overlay" style="display: none;">
-            <div class="popup-box">
-                <p>Pokemon not found</p>
-                <button onclick="closePopup()">OK</button>
-            </div>
-        </div>
-
-        <script src="index.js"></script>
+    <script src="index.js"></script>
 </body>
 </html>
