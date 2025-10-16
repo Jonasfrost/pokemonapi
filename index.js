@@ -1,14 +1,22 @@
-﻿// ========================
-// GLOBAL VARIABLES
-// ========================
-let team1 = [], team2 = [];
+﻿let team1 = [], team2 = [];
 let currentPoke1 = null, currentPoke2 = null;
 let currentHp1 = 0, maxHp1 = 0;
 let currentHp2 = 0, maxHp2 = 0;
 let stats1 = {}, stats2 = {};
 let types1 = [], types2 = [];
-let selectedMove1 = null, selectedMove2 = null;
-let waitingForMove = false;
+let selectedAction1 = null, selectedAction2 = null;
+let turnCounter = 0;
+let waitingForSwitch = false;
+
+
+// BATTLE LOG
+function addToBattleLog(message) {
+    const log = document.getElementById('battle-log');
+    const p = document.createElement('p');
+    p.textContent = message;
+    log.appendChild(p);
+    log.scrollTop = log.scrollHeight;
+}
 
 // POPUP
 function showPopup(msg = "Pokemon not found!") {
@@ -104,15 +112,22 @@ async function submitTeam(player) {
         showPopup(`Player ${player} must choose at least 1 Pokémon!`);
         return;
     }
-    if (player === 1) { team1 = team; document.getElementById('team1-selection').style.display = 'none'; }
-    else { team2 = team; document.getElementById('team2-selection').style.display = 'none'; }
+    if (player === 1) {
+        team1 = team; document.getElementById('team1-selection').style.display = 'none';
+    } else {
+        team2 = team; document.getElementById('team2-selection').style.display = 'none';
+    }
 
-    if (team1.length && team2.length) startBattle();
+    if (team1.length && team2.length) {
+        document.getElementById('team-selection').style.display = 'none';
+        startBattle();
+    }
 }
 
 // START BATTLE
 function startBattle() {
     document.getElementById('battle-container').style.display = 'flex';
+    document.getElementById('battle-log').style.display = 'block'; // show log
     currentPoke1 = team1.shift();
     currentPoke2 = team2.shift();
     loadActivePokemon(1, currentPoke1);
@@ -126,17 +141,20 @@ function loadActivePokemon(player, poke) {
     const statsDiv = document.getElementById(`stats${player}`);
     const typeDiv = document.getElementById(`type${player}`);
     const movesContainer = document.getElementById(`moves${player}`);
+    const nameDisplay = document.getElementById(`pokemonNameDisplay${player}`);
 
     if (player === 1) { currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types; }
     else { currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types; }
 
+    nameDisplay.textContent = poke.name.charAt(0).toUpperCase() + poke.name.slice(1);
     hpBar.value = `HP: ${poke.hpCurrent} / ${poke.hpMax}`;
     hpBar.style.display = 'block';
-    sprite.src = poke.sprite; sprite.style.display = 'block';
-
+    sprite.src = poke.sprite;
+    sprite.style.display = 'block';
     statsDiv.innerHTML = Object.entries(poke.stats).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join('<br>');
     statsDiv.style.display = 'block';
-    typeDiv.innerHTML = `Type: ${poke.types.join(' / ')}`; typeDiv.style.display = 'block';
+    typeDiv.innerHTML = `Type: ${poke.types.join(' / ')}`;
+    typeDiv.style.display = 'block';
 
     renderMoves(movesContainer.id, poke.moves);
 }
@@ -145,8 +163,9 @@ function loadActivePokemon(player, poke) {
 async function renderMoves(containerId, moves) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
-
     const isPoke1 = containerId === 'moves1';
+    const currentHp = isPoke1 ? currentHp1 : currentHp2;
+    if (currentHp <= 0) { container.innerHTML = '<p>This Pokémon has fainted!</p>'; return; }
 
     for (const move of moves) {
         const moveRes = await fetch(move.move.url);
@@ -156,35 +175,112 @@ async function renderMoves(containerId, moves) {
 
         const button = document.createElement("button");
         button.innerHTML = `<strong>${move.move.name}</strong><br><small>Power: ${power ?? 'N/A'}</small>`;
-
         button.onclick = async () => {
-            if (typeof power !== 'number' || power <= 0)
-            {
-                alert(`${move.move.name} does no damage.`); return;
-            }
-            if (isPoke1) selectedMove1 = { move, moveType, power };
-            else selectedMove2 = { move, moveType, power };
-
+            if (typeof power !== 'number' || power <= 0) { alert(`${move.move.name} does no damage.`); return; }
+            if (isPoke1) selectedAction1 = { type: "move", move, moveType, power };
+            else selectedAction2 = { type: "move", move, moveType, power };
             button.classList.add("selected-move");
             container.querySelectorAll("button").forEach(btn => { if (btn !== button) btn.disabled = true; });
-
-            if (selectedMove1 && selectedMove2) await executeTurn();
+            if (selectedAction1 && selectedAction2) await executeTurn();
         };
         container.appendChild(button);
     }
 }
 
+// SHOW SWITCH MENU
+function showSwitchMenu(player) {
+    const menu = document.getElementById(`switch-menu${player}`);
+    menu.innerHTML = '';
+    const team = player === 1 ? team1 : team2;
+
+    team.forEach((poke, index) => {
+        if (poke.hpCurrent > 0) {
+            const btn = document.createElement('button');
+            btn.style.display = 'flex';
+            btn.style.flexDirection = 'column';
+            btn.style.alignItems = 'center';
+            btn.style.gap = '4px';
+
+            const nameDiv = document.createElement('div');
+            nameDiv.textContent = poke.name.charAt(0).toUpperCase() + poke.name.slice(1);
+            btn.appendChild(nameDiv);
+
+            const img = document.createElement('img');
+            img.src = poke.sprite;
+            img.alt = poke.name;
+            img.width = 60; img.height = 60;
+            btn.appendChild(img);
+
+            btn.onclick = () => {
+                if (player === 1) selectedAction1 = { type: "switch", index: index };
+                else selectedAction2 = { type: "switch", index: index };
+                menu.style.display = 'none';
+                addToBattleLog(`${poke.name} will be switched in!`);
+                if (selectedAction1 && selectedAction2) executeTurn();
+            };
+            menu.appendChild(btn);
+        }
+    });
+    menu.style.display = 'flex';
+}
+
+// SWITCH ACTIVE POKEMON
+function switchActivePokemon(player, teamIndex) {
+    const team = player === 1 ? team1 : team2;
+    const newPoke = team.splice(teamIndex, 1)[0];
+    const oldPoke = player === 1 ? currentPoke1 : currentPoke2;
+    if ((player === 1 ? currentHp1 : currentHp2) > 0) team.push(oldPoke);
+
+    if (player === 1) { currentPoke1 = newPoke; currentHp1 = newPoke.hpCurrent; maxHp1 = newPoke.hpMax; stats1 = newPoke.stats; types1 = newPoke.types; loadActivePokemon(1, newPoke); }
+    else { currentPoke2 = newPoke; currentHp2 = newPoke.hpCurrent; maxHp2 = newPoke.hpMax; stats2 = newPoke.stats; types2 = newPoke.types; loadActivePokemon(2, newPoke); }
+}
+
 // EXECUTE TURN
 async function executeTurn() {
-    const firstIsPoke1 = stats1.speed >= stats2.speed;
-    const firstMove = firstIsPoke1 ? selectedMove1 : selectedMove2;
-    const secondMove = firstIsPoke1 ? selectedMove2 : selectedMove1;
-    await attack(firstIsPoke1 ? 1 : 2, firstMove);
-    if (currentHp1 > 0 && currentHp2 > 0) await attack(firstIsPoke1 ? 2 : 1, secondMove);
+    turnCounter++;
+    addToBattleLog(`--- Turn ${turnCounter} ---`);
 
-    selectedMove1 = null; selectedMove2 = null;
+    const speed1 = currentPoke1.stats.speed;
+    const speed2 = currentPoke2.stats.speed;
+
+    let firstAction, secondAction, firstPlayer, secondPlayer;
+
+    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch") {
+        firstAction = selectedAction1; firstPlayer = 1;
+        secondAction = selectedAction2; secondPlayer = 2;
+    } else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch") {
+        firstAction = selectedAction2; firstPlayer = 2;
+        secondAction = selectedAction1; secondPlayer = 1;
+    } else if (speed1 >= speed2) {
+        firstAction = selectedAction1; firstPlayer = 1;
+        secondAction = selectedAction2; secondPlayer = 2;
+    } else {
+        firstAction = selectedAction2; firstPlayer = 2;
+        secondAction = selectedAction1; secondPlayer = 1;
+    }
+
+    // FIRST ACTION
+    const fainted = await handleAction(firstPlayer, firstAction);
+
+    // SECOND ACTION
+    if (fainted) {
+        addToBattleLog(`Turn ends because a Pokémon fainted. The opponent cannot act this turn.`);
+    } else {
+        await handleAction(secondPlayer, secondAction);
+    }
+
+    selectedAction1 = null;
+    selectedAction2 = null;
+
     renderMoves('moves1', currentPoke1.moves);
     renderMoves('moves2', currentPoke2.moves);
+}
+
+// HANDLE ACTION
+async function handleAction(player, action) {
+    if (action.type === "move") return await attack(player, action);
+    else if (action.type === "switch") switchActivePokemon(player, action.index);
+    return false;
 }
 
 // ATTACK FUNCTION
@@ -193,66 +289,34 @@ async function attack(player, move) {
     const defenderStats = player === 1 ? stats2 : stats1;
     const attackerTypes = player === 1 ? types1 : types2;
     const defenderTypes = player === 1 ? types2 : types1;
-    const defenderHp = player === 1 ? currentHp2 : currentHp1;
+    const moveName = move.move.name;
 
     const stab = attackerTypes.includes(move.moveType) ? 1.5 : 1;
     const typeEffectiveness = await getTypeEffectiveness(move.moveType, defenderTypes);
     const damage = calculateDamage(50, attackerStats.attack, move.power, defenderStats.defense, stab, typeEffectiveness);
 
-    if (player === 1) { currentHp2 = Math.max(0, currentHp2 - damage); updateHpBar('healthBar2', currentHp2, maxHp2); if (currentHp2 === 0) switchNextPokemon(2); }
-    else { currentHp1 = Math.max(0, currentHp1 - damage); updateHpBar('healthBar1', currentHp1, maxHp1); if (currentHp1 === 0) switchNextPokemon(1); }
-}
- 
-// SWITCH TO NEXT POKEMON AFTER FAINT
-function switchNextPokemon(player) {
-    if (player === 1 && team1.length > 0) { currentPoke1 = team1.shift(); loadActivePokemon(1, currentPoke1); }
-    else if (player === 2 && team2.length > 0) { currentPoke2 = team2.shift(); loadActivePokemon(2, currentPoke2); }
-    else showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
-}
-function showSwitchMenu(player) {
-    const menu = document.getElementById(`switch-menu${player}`);
-    menu.innerHTML = '';
-    const team = player === 1 ? team1 : team2;
-
-    team.forEach((poke, index) => {
-        if (poke.hpCurrent > 0) { // only show alive Pokémon
-            const btn = document.createElement('button');
-            btn.textContent = poke.name;
-            btn.onclick = () => {
-                switchActivePokemon(player, index);
-                menu.style.display = 'none';
-            };
-            menu.appendChild(btn);
-        }
-    });
-
-    menu.style.display = 'block';
-}
-
-// SWITCH ACTIVE POKEMON
-function switchActivePokemon(player, teamIndex) {
-    const team = player === 1 ? team1 : team2;
-    const newPoke = team.splice(teamIndex, 1)[0]; // remove from team array
-    const oldPoke = player === 1 ? currentPoke1 : currentPoke2;
-
-    // push old active Pokémon back to team (if it still has HP)
-    if ((player === 1 ? currentHp1 : currentHp2) > 0) team.push(oldPoke);
-
-    // set new active Pokémon
     if (player === 1) {
-        currentPoke1 = newPoke;
-        currentHp1 = newPoke.hpCurrent;
-        maxHp1 = newPoke.hpMax;
-        stats1 = newPoke.stats;
-        types1 = newPoke.types;
-        loadActivePokemon(1, newPoke);
+        currentHp2 = Math.max(0, currentHp2 - damage);
+        updateHpBar('healthBar2', currentHp2, maxHp2);
+        addToBattleLog(`${currentPoke1.name} used ${moveName} (-${damage} damage!)`);
+        if (currentHp2 === 0) { addToBattleLog(`${currentPoke2.name} fainted!`); switchNextPokemon(2); return true; }
     } else {
-        currentPoke2 = newPoke;
-        currentHp2 = newPoke.hpCurrent;
-        maxHp2 = newPoke.hpMax;
-        stats2 = newPoke.stats;
-        types2 = newPoke.types;
-        loadActivePokemon(2, newPoke);
+        currentHp1 = Math.max(0, currentHp1 - damage);
+        updateHpBar('healthBar1', currentHp1, maxHp1);
+        addToBattleLog(`${currentPoke2.name} used ${moveName} (-${damage} damage!)`);
+        if (currentHp1 === 0) { addToBattleLog(`${currentPoke1.name} fainted!`); switchNextPokemon(1); return true; }
+    }
+
+    return false;
+}
+
+// SWITCH AFTER FAINT
+function switchNextPokemon(player) {
+    const team = player === 1 ? team1 : team2;
+    if (team.length > 0) {
+        showSwitchMenu(player);
+    } else {
+        showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
     }
 }
-console.log("Simon was here")
+console.log("Simon Was Here");

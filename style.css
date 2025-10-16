@@ -1,6 +1,25 @@
 ﻿body {
 }
 
+.team-selection {
+    margin: 20px;
+}
+
+    .team-selection .team-inputs {
+        display: flex;
+        flex-direction: column;
+        gap: 8px; 
+        margin-bottom: 10px;
+    }
+
+.pokemon-name-display {
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 5px;
+    font-size: 18px;
+    color: #333;
+}
+
 .pokemon-container {
     display: flex;
     gap: 40px;
@@ -162,3 +181,43 @@ healthBar {
     box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     pointer-events: none;
 }
+.battle-log {
+    display: none;
+    width: 80%;
+    max-width: 800px;
+    margin: 20px auto;
+    height: 150px;
+    border: 2px solid #333;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f0f0f0;
+    overflow-y: auto;
+    font-family: sans-serif;
+    font-size: 14px;
+}
+.switch-menu {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 10px;
+}
+
+    .switch-menu button {
+        padding: 6px 12px;
+        border: 1px solid #888;
+        border-radius: 6px;
+        background-color: #eee;
+        cursor: pointer;
+        text-transform: capitalize;
+        font-family: sans-serif;
+    }
+
+        .switch-menu button:hover {
+            background-color: #ddd;
+        }
+
+
+    .battle-log p {
+        margin: 4px 0;
+    }
+
