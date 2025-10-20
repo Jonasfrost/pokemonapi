@@ -10,7 +10,7 @@ let waitingForSwitch = false;
 let forcedSwitchPlayer = null;
 let faintSwitchIn = false;
 const moveCache = new Map();
-
+let switched = false;
 
 // BATTLE LOG
 function addToBattleLog(message) {
@@ -49,7 +49,9 @@ function calculateDamage(level, attackStat, power, defenseStat, stab = 1, typeEf
 
 // TYPE EFFECTIVENESS
 async function getTypeEffectiveness(moveType, defenderTypes) {
+    if (!moveType) return 1;
     const res = await fetch(`https://pokeapi.co/api/v2/type/${moveType}`);
+    if (!res.ok) return 1;
     const data = await res.json();
     let multiplier = 1;
     defenderTypes.forEach(defType => {
@@ -74,8 +76,7 @@ async function fetchPokemonObject(name) {
         const data = await res.json();
         const level = 50, iv = 31, ev = 0;
         const stats = {};
-        data.stats.forEach(statObj =>
-        {
+        data.stats.forEach(statObj => {
             stats[statObj.stat.name] = calculateStat(statObj.base_stat, level, iv, ev, statObj.stat.name === 'hp');
         });
         const hp = stats.hp;
@@ -86,26 +87,38 @@ async function fetchPokemonObject(name) {
         // For each selected move, fetch details (cached) and attach as .details
         const detailedMoves = await Promise.all(rawMoves.map(async (mv) => {
             const url = mv.move.url;
-            if (moveCache.has(url))
-            {
+            if (moveCache.has(url)) {
                 mv.details = moveCache.get(url);
                 return mv;
             }
             try {
                 const mres = await fetch(url);
                 if (!mres.ok) {
-                    mv.details = { power: null, type: null };
-                    moveCache.set(url, mv.details);
+                    const fallback = { power: null, type: null, damage_class: null, effect_text: null };
+                    mv.details = fallback;
+                    moveCache.set(url, fallback);
                     return mv;
                 }
                 const mdata = await mres.json();
-                const details = { power: mdata.power ?? null, type: mdata.type?.name ?? null };
+                // Get English effect entry (prefer short_effect)
+                let effectText = null;
+                if (Array.isArray(mdata.effect_entries)) {
+                    const en = mdata.effect_entries.find(e => e.language && e.language.name === 'en');
+                    if (en) effectText = en.short_effect || en.effect || null;
+                }
+                const details = {
+                    power: mdata.power ?? null,
+                    type: mdata.type?.name ?? null,
+                    damage_class: mdata.damage_class?.name ?? null,
+                    effect_text: effectText
+                };
                 mv.details = details;
                 moveCache.set(url, details);
                 return mv;
             } catch (e) {
-                mv.details = { power: null, type: null };
-                moveCache.set(url, mv.details);
+                const fallback = { power: null, type: null, damage_class: null, effect_text: null };
+                mv.details = fallback;
+                moveCache.set(url, fallback);
                 return mv;
             }
         }));
@@ -147,17 +160,13 @@ async function submitTeam(player) {
         showPopup(`Player ${player} must choose at least 1 Pokémon!`);
         return;
     }
-    if (player === 1)
-    {
+    if (player === 1) {
         team1 = team; document.getElementById('team1-selection').style.display = 'none';
-    }
-    else
-    {
+    } else {
         team2 = team; document.getElementById('team2-selection').style.display = 'none';
     }
 
-    if (team1.length && team2.length)
-    {
+    if (team1.length && team2.length) {
         document.getElementById('team-selection').style.display = 'none';
         startBattle();
     }
@@ -182,12 +191,9 @@ function loadActivePokemon(player, poke) {
     const movesContainer = document.getElementById(`moves${player}`);
     const nameDisplay = document.getElementById(`pokemonNameDisplay${player}`);
 
-    if (player === 1)
-    {
+    if (player === 1) {
         currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types;
-    }
-    else
-    {
+    } else {
         currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types;
     }
 
@@ -218,7 +224,6 @@ async function renderMoves(containerId, moves) {
         container.appendChild(waitingMsg);
         return;
     }
-
     if (currentHp <= 0)
     {
         container.innerHTML = '<p>This Pokémon has fainted!</p>'; return;
@@ -228,13 +233,15 @@ async function renderMoves(containerId, moves) {
         // Use cached details if present
         let power = move.details?.power ?? null;
         let moveType = move.details?.type ?? null;
+        let damageClass = move.details?.damage_class ?? null;
+        let effectText = move.details?.effect_text ?? null;
 
         // Fallback: if no details attached, try fetching once (and cache)
-        if (power === null && move.move && move.move.url) {
+        if ((power === null && damageClass === null) && move.move && move.move.url) {
             const url = move.move.url;
             if (moveCache.has(url)) {
                 const d = moveCache.get(url);
-                power = d.power; moveType = d.type;
+                power = d.power; moveType = d.type; damageClass = d.damage_class; effectText = d.effect_text;
                 move.details = d;
             } else {
                 try {
@@ -242,33 +249,92 @@ async function renderMoves(containerId, moves) {
                     const moveDetails = await moveRes.json();
                     power = moveDetails.power ?? null;
                     moveType = moveDetails.type?.name ?? null;
-                    const d = { power, type: moveType };
+                    damageClass = moveDetails.damage_class?.name ?? null;
+                    let et = null;
+                    if (Array.isArray(moveDetails.effect_entries)) {
+                        const en = moveDetails.effect_entries.find(e => e.language && e.language.name === 'en');
+                        if (en) et = en.short_effect || en.effect || null;
+                    }
+                    effectText = et;
+                    const d = { power, type: moveType, damage_class: damageClass, effect_text: effectText };
                     move.details = d;
                     moveCache.set(url, d);
                 } catch (e) {
-                    power = null; moveType = null;
-                    move.details = { power: null, type: null };
-                    moveCache.set(move.move.url, move.details);
+                    power = null; moveType = null; damageClass = null; effectText = null;
+                    const fallback = { power: null, type: null, damage_class: null, effect_text: null };
+                    move.details = fallback;
+                    moveCache.set(move.move.url, fallback);
                 }
             }
         }
 
+        const isStatus = damageClass === 'status';
+        // Build hover text (title) showing power or effect only on hover
+        const hoverParts = [];
+        if (isStatus) {
+            if (effectText) hoverParts.push(`Effect: ${effectText}`);
+            else hoverParts.push('Effect: Status move');
+        } else {
+            hoverParts.push(`Power: ${power ?? 'N/A'}`);
+            if (moveType) hoverParts.push(`Type: ${moveType}`);
+        }
+        const hoverText = hoverParts.join(' | ');
+
         const button = document.createElement("button");
-        button.innerHTML = `<strong>${move.move.name}</strong><br><small>Power: ${power ?? 'N/A'}</small>`;
+        // Display only the move name; details appear on hover via title
+        button.textContent = move.move.name;
+        button.title = hoverText;
+        button.setAttribute('aria-label', `${move.move.name}. ${hoverText}`);
+
+        // Determine if this move is currently selected for its player
+        const currentSelection = isPoke1 ? selectedAction1 : selectedAction2;
+        const isSelected = currentSelection && currentSelection.move && currentSelection.move.move && currentSelection.move.move.name === move.move.name;
+        if (isSelected) button.classList.add('selected-move');
+
         button.onclick = async () => {
             if (waitingForSwitch) return; // extra safety
-            if (typeof power !== 'number' || power <= 0)
-            {
-                alert(`${move.move.name} does no damage.`);
-                return;
+
+            // Toggle selection: clicking the same move again will deselect
+            if (isPoke1) {
+                if (selectedAction1 && selectedAction1.move && selectedAction1.move.move.name === move.move.name) {
+                    selectedAction1 = null;
+                } else {
+                    // Select this move
+                    if (isStatus) selectedAction1 = { type: "move", move, moveType, power: 0, isStatus: true, effectText };
+                    else selectedAction1 = { type: "move", move, moveType, power };
+                }
+            } else {
+                if (selectedAction2 && selectedAction2.move && selectedAction2.move.move.name === move.move.name) {
+                    selectedAction2 = null;
+                } else {
+                    if (isStatus) selectedAction2 = { type: "move", move, moveType, power: 0, isStatus: true, effectText };
+                    else selectedAction2 = { type: "move", move, moveType, power };
+                }
             }
-            if (isPoke1) selectedAction1 = { type: "move", move, moveType, power };
-            else selectedAction2 = { type: "move", move, moveType, power };
-            button.classList.add("selected-move");
-            container.querySelectorAll("button").forEach(btn => { if (btn !== button) btn.disabled = true; });
+
+            // Re-render both move lists to update selection visual state
+            renderMoves('moves1', currentPoke1.moves);
+            renderMoves('moves2', currentPoke2.moves);
+
+            // If both players have selections, execute the turn
             if (selectedAction1 && selectedAction2) await executeTurn();
         };
         container.appendChild(button);
+    }
+
+    // Add cancel selection button if player has a current selection
+    const playerHasSelection = isPoke1 ? !!selectedAction1 : !!selectedAction2;
+    if (playerHasSelection) {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel selection';
+        cancelBtn.className = 'cancel-selection';
+        cancelBtn.onclick = () => {
+            if (isPoke1) selectedAction1 = null; else selectedAction2 = null;
+            // Re-render to update UI
+            renderMoves('moves1', currentPoke1.moves);
+            renderMoves('moves2', currentPoke2.moves);
+        };
+        container.appendChild(cancelBtn);
     }
 }
 
@@ -279,8 +345,7 @@ function showSwitchMenu(player) {
     const team = player === 1 ? team1 : team2;
 
     team.forEach((poke, index) => {
-        if (poke.hpCurrent > 0)
-        {
+        if (poke.hpCurrent > 0) {
             const btn = document.createElement('button');
             btn.style.display = 'flex';
             btn.style.flexDirection = 'column';
@@ -297,9 +362,17 @@ function showSwitchMenu(player) {
             img.width = 60; img.height = 60;
             btn.appendChild(img);
 
+            // If this team member is currently selected for switch, mark it
+            const currentSel = player === 1 ? selectedAction1 : selectedAction2;
+            if (currentSel && currentSel.type === 'switch' && currentSel.index === index)
+            {
+                btn.classList.add('selected-switch');
+            }
+
             btn.onclick = () => {
                 // If this is a forced switch due to faint, perform it immediately and end the pending turn
-                if (waitingForSwitch && forcedSwitchPlayer === player) {
+                if (waitingForSwitch && forcedSwitchPlayer === player)
+                {
                     menu.style.display = 'none';
                     addToBattleLog(`${poke.name} was switched in due to faint.`);
                     switchActivePokemon(player, index);
@@ -315,16 +388,75 @@ function showSwitchMenu(player) {
                     return;
                 }
 
-                // Normal switch selection during a turn
-                if (player === 1) selectedAction1 = { type: "switch", index: index };
-                else selectedAction2 = { type: "switch", index: index };
+                // Normal switch selection during a turn: toggle selection if same index clicked
+                const prevSel = player === 1 ? selectedAction1 : selectedAction2;
+                if (prevSel && prevSel.type === 'switch' && prevSel.index === index)
+                {
+                    // Deselect
+                    if (player === 1)
+                    {
+                        selectedAction1 = null;
+                    }
+                    else
+                    {
+                        selectedAction2 = null;
+                    }
+                    addToBattleLog(`${poke.name} switch cancelled.`);
+                }
+                else
+                {
+                    // Select this pokemon to switch
+                    if (player === 1)
+                    {
+                        selectedAction1 = { type: "switch", index: index };
+                        switched = true;
+                    }
+                    else
+                    {
+                        selectedAction2 = { type: "switch", index: index };
+                        switched = true;
+                    }
+                }
+
                 menu.style.display = 'none';
-                addToBattleLog(`${poke.name} will be switched in!`);
-                if (selectedAction1 && selectedAction2) executeTurn();
+
+                // If both players have selections, execute the turn
+                if (selectedAction1 && selectedAction2)
+                {
+                    executeTurn()
+                    if (switched === true)
+                    {
+                        addToBattleLog(`${poke.name} switched in!`);
+                        switched = false;
+                    }
+                }
+                else
+                {
+                    // Update moves UI to reflect selection state
+                    renderMoves('moves1', currentPoke1.moves);
+                    renderMoves('moves2', currentPoke2.moves);
+                }
             };
             menu.appendChild(btn);
         }
     });
+
+    // Add a cancel button to allow clearing a previously chosen switch without selecting a new one
+    const currentSel = player === 1 ? selectedAction1 : selectedAction2;
+    if (currentSel && currentSel.type === 'switch') {
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel switch selection';
+        cancelBtn.className = 'cancel-switch';
+        cancelBtn.onclick = () => {
+            if (player === 1) selectedAction1 = null; else selectedAction2 = null;
+            menu.style.display = 'none';
+            addToBattleLog(`Player ${player} cancelled their switch selection.`);
+            renderMoves('moves1', currentPoke1.moves);
+            renderMoves('moves2', currentPoke2.moves);
+        };
+        menu.appendChild(cancelBtn);
+    }
+
     menu.style.display = 'flex';
 }
 
@@ -355,23 +487,16 @@ async function executeTurn() {
 
     let firstAction, secondAction, firstPlayer, secondPlayer;
 
-    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch")
-    {
+    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch") {
         firstAction = selectedAction1; firstPlayer = 1;
         secondAction = selectedAction2; secondPlayer = 2;
-    }
-    else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch")
-    {
+    } else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch") {
         firstAction = selectedAction2; firstPlayer = 2;
         secondAction = selectedAction1; secondPlayer = 1;
-    }
-    else if (speed1 >= speed2)
-    {
+    } else if (speed1 >= speed2) {
         firstAction = selectedAction1; firstPlayer = 1;
         secondAction = selectedAction2; secondPlayer = 2;
-    }
-    else
-    {
+    } else {
         firstAction = selectedAction2; firstPlayer = 2;
         secondAction = selectedAction1; secondPlayer = 1;
     }
@@ -380,12 +505,9 @@ async function executeTurn() {
     const fainted = await handleAction(firstPlayer, firstAction);
 
     // SECOND ACTION
-    if (fainted)
-    {
+    if (fainted) {
         addToBattleLog(`Turn ends because a Pokémon fainted. The opponent cannot act this turn.`);
-    }
-    else
-    {
+    } else {
         await handleAction(secondPlayer, secondAction);
     }
 
@@ -398,6 +520,7 @@ async function executeTurn() {
 
 // HANDLE ACTION
 async function handleAction(player, action) {
+    if (!action) return false;
     if (action.type === "move") return await attack(player, action);
     else if (action.type === "switch") switchActivePokemon(player, action.index);
     return false;
@@ -405,15 +528,29 @@ async function handleAction(player, action) {
 
 // ATTACK FUNCTION
 async function attack(player, move) {
+    // move may be the selectedAction structure, normalize
+    const selected = move;
     const attackerStats = player === 1 ? stats1 : stats2;
     const defenderStats = player === 1 ? stats2 : stats1;
     const attackerTypes = player === 1 ? types1 : types2;
     const defenderTypes = player === 1 ? types2 : types1;
-    const moveName = move.move.name;
+    const moveName = selected.move.move.name;
 
-    const stab = attackerTypes.includes(move.moveType) ? 1.5 : 1;
-    const typeEffectiveness = await getTypeEffectiveness(move.moveType, defenderTypes);
-    const damage = calculateDamage(50, attackerStats.attack, move.power, defenderStats.defense, stab, typeEffectiveness);
+    // Handle status moves
+    const isStatusMove = selected.isStatus || selected.move.details?.damage_class === 'status' || selected.move.details?.damage_class === 'status';
+    if (isStatusMove) {
+        const effectText = selected.effectText ?? selected.move.details?.effect_text ?? 'Status effect.';
+        if (player === 1) addToBattleLog(`${currentPoke1.name} used ${moveName} (status): ${effectText}`);
+        else addToBattleLog(`${currentPoke2.name} used ${moveName} (status): ${effectText}`);
+        return false; // no faint
+    }
+
+    const movePower = selected.power ?? selected.move.details?.power ?? 0;
+    const moveType = selected.moveType ?? selected.move.details?.type ?? null;
+
+    const stab = attackerTypes.includes(moveType) ? 1.5 : 1;
+    const typeEffectiveness = await getTypeEffectiveness(moveType, defenderTypes);
+    const damage = calculateDamage(50, attackerStats.attack, movePower, defenderStats.defense, stab, typeEffectiveness);
 
     if (player === 1) {
         currentHp2 = Math.max(0, currentHp2 - damage);
@@ -433,17 +570,14 @@ async function attack(player, move) {
 // SWITCH AFTER FAINT
 function switchNextPokemon(player) {
     const team = player === 1 ? team1 : team2;
-    if (team.length > 0)
-    {
+    if (team.length > 0) {
         waitingForSwitch = true;
         forcedSwitchPlayer = player;
 
         selectedAction1 = null; selectedAction2 = null;
 
         showSwitchMenu(player);
-    }
-    else
-    {
+    } else {
         showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
     }
 }
