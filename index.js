@@ -7,6 +7,9 @@ let types1 = [], types2 = [];
 let selectedAction1 = null, selectedAction2 = null;
 let turnCounter = 0;
 let waitingForSwitch = false;
+let forcedSwitchPlayer = null;
+let faintSwitchIn = false;
+const moveCache = new Map();
 
 
 // BATTLE LOG
@@ -71,10 +74,42 @@ async function fetchPokemonObject(name) {
         const data = await res.json();
         const level = 50, iv = 31, ev = 0;
         const stats = {};
-        data.stats.forEach(statObj => {
+        data.stats.forEach(statObj =>
+        {
             stats[statObj.stat.name] = calculateStat(statObj.base_stat, level, iv, ev, statObj.stat.name === 'hp');
         });
         const hp = stats.hp;
+
+        // Select random moves
+        const rawMoves = getRandomMoves(data.moves, 4);
+
+        // For each selected move, fetch details (cached) and attach as .details
+        const detailedMoves = await Promise.all(rawMoves.map(async (mv) => {
+            const url = mv.move.url;
+            if (moveCache.has(url))
+            {
+                mv.details = moveCache.get(url);
+                return mv;
+            }
+            try {
+                const mres = await fetch(url);
+                if (!mres.ok) {
+                    mv.details = { power: null, type: null };
+                    moveCache.set(url, mv.details);
+                    return mv;
+                }
+                const mdata = await mres.json();
+                const details = { power: mdata.power ?? null, type: mdata.type?.name ?? null };
+                mv.details = details;
+                moveCache.set(url, details);
+                return mv;
+            } catch (e) {
+                mv.details = { power: null, type: null };
+                moveCache.set(url, mv.details);
+                return mv;
+            }
+        }));
+
         return {
             name: data.name,
             sprite: data.sprites.front_default,
@@ -82,7 +117,7 @@ async function fetchPokemonObject(name) {
             types: data.types.map(t => t.type.name),
             hpCurrent: hp,
             hpMax: hp,
-            moves: getRandomMoves(data.moves, 4)
+            moves: detailedMoves
         };
     } catch { return null; }
 }
@@ -112,13 +147,17 @@ async function submitTeam(player) {
         showPopup(`Player ${player} must choose at least 1 Pokémon!`);
         return;
     }
-    if (player === 1) {
+    if (player === 1)
+    {
         team1 = team; document.getElementById('team1-selection').style.display = 'none';
-    } else {
+    }
+    else
+    {
         team2 = team; document.getElementById('team2-selection').style.display = 'none';
     }
 
-    if (team1.length && team2.length) {
+    if (team1.length && team2.length)
+    {
         document.getElementById('team-selection').style.display = 'none';
         startBattle();
     }
@@ -143,8 +182,14 @@ function loadActivePokemon(player, poke) {
     const movesContainer = document.getElementById(`moves${player}`);
     const nameDisplay = document.getElementById(`pokemonNameDisplay${player}`);
 
-    if (player === 1) { currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types; }
-    else { currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types; }
+    if (player === 1)
+    {
+        currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types;
+    }
+    else
+    {
+        currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types;
+    }
 
     nameDisplay.textContent = poke.name.charAt(0).toUpperCase() + poke.name.slice(1);
     hpBar.value = `HP: ${poke.hpCurrent} / ${poke.hpMax}`;
@@ -165,18 +210,58 @@ async function renderMoves(containerId, moves) {
     container.innerHTML = "";
     const isPoke1 = containerId === 'moves1';
     const currentHp = isPoke1 ? currentHp1 : currentHp2;
-    if (currentHp <= 0) { container.innerHTML = '<p>This Pokémon has fainted!</p>'; return; }
+
+    // If a forced switch is pending, prevent move selection and show notice
+    if (waitingForSwitch) {
+        const waitingMsg = document.createElement('p');
+        waitingMsg.textContent = `Waiting for Player ${forcedSwitchPlayer} to switch (fainted).`;
+        container.appendChild(waitingMsg);
+        return;
+    }
+
+    if (currentHp <= 0)
+    {
+        container.innerHTML = '<p>This Pokémon has fainted!</p>'; return;
+    }
 
     for (const move of moves) {
-        const moveRes = await fetch(move.move.url);
-        const moveDetails = await moveRes.json();
-        const power = moveDetails.power;
-        const moveType = moveDetails.type.name;
+        // Use cached details if present
+        let power = move.details?.power ?? null;
+        let moveType = move.details?.type ?? null;
+
+        // Fallback: if no details attached, try fetching once (and cache)
+        if (power === null && move.move && move.move.url) {
+            const url = move.move.url;
+            if (moveCache.has(url)) {
+                const d = moveCache.get(url);
+                power = d.power; moveType = d.type;
+                move.details = d;
+            } else {
+                try {
+                    const moveRes = await fetch(url);
+                    const moveDetails = await moveRes.json();
+                    power = moveDetails.power ?? null;
+                    moveType = moveDetails.type?.name ?? null;
+                    const d = { power, type: moveType };
+                    move.details = d;
+                    moveCache.set(url, d);
+                } catch (e) {
+                    power = null; moveType = null;
+                    move.details = { power: null, type: null };
+                    moveCache.set(move.move.url, move.details);
+                }
+            }
+        }
 
         const button = document.createElement("button");
         button.innerHTML = `<strong>${move.move.name}</strong><br><small>Power: ${power ?? 'N/A'}</small>`;
         button.onclick = async () => {
-            if (typeof power !== 'number' || power <= 0) { alert(`${move.move.name} does no damage.`); return; }
+            if (waitingForSwitch) return; // extra safety
+            if (typeof power !== 'number' || power <= 0)
+            {
+                alert(`${move.move.name} does no damage.`);
+                return;
+            }
             if (isPoke1) selectedAction1 = { type: "move", move, moveType, power };
             else selectedAction2 = { type: "move", move, moveType, power };
             button.classList.add("selected-move");
@@ -194,7 +279,8 @@ function showSwitchMenu(player) {
     const team = player === 1 ? team1 : team2;
 
     team.forEach((poke, index) => {
-        if (poke.hpCurrent > 0) {
+        if (poke.hpCurrent > 0)
+        {
             const btn = document.createElement('button');
             btn.style.display = 'flex';
             btn.style.flexDirection = 'column';
@@ -212,6 +298,24 @@ function showSwitchMenu(player) {
             btn.appendChild(img);
 
             btn.onclick = () => {
+                // If this is a forced switch due to faint, perform it immediately and end the pending turn
+                if (waitingForSwitch && forcedSwitchPlayer === player) {
+                    menu.style.display = 'none';
+                    addToBattleLog(`${poke.name} was switched in due to faint.`);
+                    switchActivePokemon(player, index);
+
+                    // Clear forced switch state and any selected actions so the opponent cannot act this turn
+                    waitingForSwitch = false;
+                    forcedSwitchPlayer = null;
+                    selectedAction1 = null; selectedAction2 = null;
+
+                    // Re-render UI
+                    renderMoves('moves1', currentPoke1.moves);
+                    renderMoves('moves2', currentPoke2.moves);
+                    return;
+                }
+
+                // Normal switch selection during a turn
                 if (player === 1) selectedAction1 = { type: "switch", index: index };
                 else selectedAction2 = { type: "switch", index: index };
                 menu.style.display = 'none';
@@ -231,8 +335,14 @@ function switchActivePokemon(player, teamIndex) {
     const oldPoke = player === 1 ? currentPoke1 : currentPoke2;
     if ((player === 1 ? currentHp1 : currentHp2) > 0) team.push(oldPoke);
 
-    if (player === 1) { currentPoke1 = newPoke; currentHp1 = newPoke.hpCurrent; maxHp1 = newPoke.hpMax; stats1 = newPoke.stats; types1 = newPoke.types; loadActivePokemon(1, newPoke); }
-    else { currentPoke2 = newPoke; currentHp2 = newPoke.hpCurrent; maxHp2 = newPoke.hpMax; stats2 = newPoke.stats; types2 = newPoke.types; loadActivePokemon(2, newPoke); }
+    if (player === 1)
+    {
+        currentPoke1 = newPoke; currentHp1 = newPoke.hpCurrent; maxHp1 = newPoke.hpMax; stats1 = newPoke.stats; types1 = newPoke.types; loadActivePokemon(1, newPoke);
+    }
+    else
+    {
+        currentPoke2 = newPoke; currentHp2 = newPoke.hpCurrent; maxHp2 = newPoke.hpMax; stats2 = newPoke.stats; types2 = newPoke.types; loadActivePokemon(2, newPoke);
+    }
 }
 
 // EXECUTE TURN
@@ -245,16 +355,23 @@ async function executeTurn() {
 
     let firstAction, secondAction, firstPlayer, secondPlayer;
 
-    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch") {
+    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch")
+    {
         firstAction = selectedAction1; firstPlayer = 1;
         secondAction = selectedAction2; secondPlayer = 2;
-    } else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch") {
+    }
+    else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch")
+    {
         firstAction = selectedAction2; firstPlayer = 2;
         secondAction = selectedAction1; secondPlayer = 1;
-    } else if (speed1 >= speed2) {
+    }
+    else if (speed1 >= speed2)
+    {
         firstAction = selectedAction1; firstPlayer = 1;
         secondAction = selectedAction2; secondPlayer = 2;
-    } else {
+    }
+    else
+    {
         firstAction = selectedAction2; firstPlayer = 2;
         secondAction = selectedAction1; secondPlayer = 1;
     }
@@ -263,9 +380,12 @@ async function executeTurn() {
     const fainted = await handleAction(firstPlayer, firstAction);
 
     // SECOND ACTION
-    if (fainted) {
+    if (fainted)
+    {
         addToBattleLog(`Turn ends because a Pokémon fainted. The opponent cannot act this turn.`);
-    } else {
+    }
+    else
+    {
         await handleAction(secondPlayer, secondAction);
     }
 
@@ -313,10 +433,19 @@ async function attack(player, move) {
 // SWITCH AFTER FAINT
 function switchNextPokemon(player) {
     const team = player === 1 ? team1 : team2;
-    if (team.length > 0) {
+    if (team.length > 0)
+    {
+        waitingForSwitch = true;
+        forcedSwitchPlayer = player;
+
+        selectedAction1 = null; selectedAction2 = null;
+
         showSwitchMenu(player);
-    } else {
+    }
+    else
+    {
         showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
     }
 }
+
 console.log("Simon Was Here");
