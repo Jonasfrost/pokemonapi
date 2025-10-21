@@ -1,585 +1,428 @@
-﻿let team1 = [], team2 = [];
-let currentPoke1 = null, currentPoke2 = null;
-let currentHp1 = 0, maxHp1 = 0;
-let currentHp2 = 0, maxHp2 = 0;
-let stats1 = {}, stats2 = {};
-let types1 = [], types2 = [];
-let selectedAction1 = null, selectedAction2 = null;
-let turnCounter = 0;
-let waitingForSwitch = false;
-let forcedSwitchPlayer = null;
-let faintSwitchIn = false;
-const moveCache = new Map();
-let switched = false;
-
-// BATTLE LOG
-function addToBattleLog(message) {
-    const log = document.getElementById('battle-log');
-    const p = document.createElement('p');
-    p.textContent = message;
-    log.appendChild(p);
-    log.scrollTop = log.scrollHeight;
-}
-
-// POPUP
-function showPopup(msg = "Pokemon not found!") {
-    document.querySelector(".popup-box p").textContent = msg;
-    document.getElementById("popup").style.display = "flex";
-}
-function closePopup() { document.getElementById("popup").style.display = "none"; }
-
-// STATS
+﻿// ------------------ UTILITY FUNCTIONS ------------------
 function calculateStat(base, level = 50, iv = 31, ev = 0, isHP = false) {
     if (isHP) return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + level + 10;
     return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
 }
 
-// HP BAR
-function updateHpBar(hpBarId, current, max) {
-    const bar = document.getElementById(hpBarId);
-    bar.value = `HP: ${current} / ${max}`;
-}
-
-// DAMAGE
 function calculateDamage(level, attackStat, power, defenseStat, stab = 1, typeEffectiveness = 1) {
     const randomFactor = Math.floor(Math.random() * (100 - 85 + 1)) + 85;
     const baseDamage = ((((2 * level) / 5 + 2) * attackStat * power / defenseStat) / 50) + 2;
     return Math.floor(baseDamage * stab * typeEffectiveness * randomFactor / 100);
 }
 
-// TYPE EFFECTIVENESS
+// Get type effectiveness using PokeAPI
 async function getTypeEffectiveness(moveType, defenderTypes) {
-    if (!moveType) return 1;
-    const res = await fetch(`https://pokeapi.co/api/v2/type/${moveType}`);
-    if (!res.ok) return 1;
-    const data = await res.json();
-    let multiplier = 1;
-    defenderTypes.forEach(defType => {
-        if (data.damage_relations.double_damage_to.some(t => t.name === defType)) multiplier *= 2;
-        if (data.damage_relations.half_damage_to.some(t => t.name === defType)) multiplier *= 0.5;
-        if (data.damage_relations.no_damage_to.some(t => t.name === defType)) multiplier *= 0;
-    });
-    return multiplier;
-}
-
-// RANDOM MOVES
-function getRandomMoves(movesArray, count = 4) {
-    const shuffled = movesArray.sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-}
-
-// FETCH POKEMON
-async function fetchPokemonObject(name) {
+    if (!moveType || !defenderTypes || defenderTypes.length === 0) return 1;
     try {
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name}`);
-        if (!res.ok) return null;
+        const res = await fetch(`https://pokeapi.co/api/v2/type/${moveType}`);
+        if (!res.ok) return 1;
         const data = await res.json();
-        const level = 50, iv = 31, ev = 0;
-        const stats = {};
-        data.stats.forEach(statObj => {
-            stats[statObj.stat.name] = calculateStat(statObj.base_stat, level, iv, ev, statObj.stat.name === 'hp');
+        let multiplier = 1;
+        defenderTypes.forEach(defType => {
+            if (data.damage_relations.double_damage_to.some(t => t.name === defType)) multiplier *= 2;
+            if (data.damage_relations.half_damage_to.some(t => t.name === defType)) multiplier *= 0.5;
+            if (data.damage_relations.no_damage_to.some(t => t.name === defType)) multiplier *= 0;
         });
-        const hp = stats.hp;
-
-        // Select random moves
-        const rawMoves = getRandomMoves(data.moves, 4);
-
-        // For each selected move, fetch details (cached) and attach as .details
-        const detailedMoves = await Promise.all(rawMoves.map(async (mv) => {
-            const url = mv.move.url;
-            if (moveCache.has(url)) {
-                mv.details = moveCache.get(url);
-                return mv;
-            }
-            try {
-                const mres = await fetch(url);
-                if (!mres.ok) {
-                    const fallback = { power: null, type: null, damage_class: null, effect_text: null };
-                    mv.details = fallback;
-                    moveCache.set(url, fallback);
-                    return mv;
-                }
-                const mdata = await mres.json();
-                // Get English effect entry (prefer short_effect)
-                let effectText = null;
-                if (Array.isArray(mdata.effect_entries)) {
-                    const en = mdata.effect_entries.find(e => e.language && e.language.name === 'en');
-                    if (en) effectText = en.short_effect || en.effect || null;
-                }
-                const details = {
-                    power: mdata.power ?? null,
-                    type: mdata.type?.name ?? null,
-                    damage_class: mdata.damage_class?.name ?? null,
-                    effect_text: effectText
-                };
-                mv.details = details;
-                moveCache.set(url, details);
-                return mv;
-            } catch (e) {
-                const fallback = { power: null, type: null, damage_class: null, effect_text: null };
-                mv.details = fallback;
-                moveCache.set(url, fallback);
-                return mv;
-            }
-        }));
-
-        return {
-            name: data.name,
-            sprite: data.sprites.front_default,
-            stats,
-            types: data.types.map(t => t.type.name),
-            hpCurrent: hp,
-            hpMax: hp,
-            moves: detailedMoves
-        };
-    } catch { return null; }
-}
-
-// RANDOMIZE TEAM
-async function randomizeTeam(player) {
-    for (let i = 1; i <= 6; i++) {
-        const randomId = Math.floor(Math.random() * 1025) + 1;
-        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${randomId}`);
-        if (!res.ok) continue;
-        const data = await res.json();
-        document.getElementById(`team${player}-poke${i}`).value = data.name;
+        return multiplier;
+    } catch {
+        return 1;
     }
 }
-
-// SUBMIT TEAM
-async function submitTeam(player) {
-    const team = [];
-    for (let i = 1; i <= 6; i++) {
-        const input = document.getElementById(`team${player}-poke${i}`);
-        const name = input.value.trim().toLowerCase();
-        if (!name) continue;
-        const poke = await fetchPokemonObject(name);
-        if (poke) team.push(poke);
-    }
-    if (team.length === 0) {
-        showPopup(`Player ${player} must choose at least 1 Pokémon!`);
-        return;
-    }
-    if (player === 1) {
-        team1 = team; document.getElementById('team1-selection').style.display = 'none';
-    } else {
-        team2 = team; document.getElementById('team2-selection').style.display = 'none';
-    }
-
-    if (team1.length && team2.length) {
-        document.getElementById('team-selection').style.display = 'none';
-        startBattle();
-    }
+ 
+// Normalize stat name from effect text to stat key used in pokemon.stats
+function normalizeStatName(raw) {
+    if (!raw) return null;
+    let s = raw.toLowerCase().trim();
+    s = s.replace(/[^a-z\s-]/g, '');
+    s = s.replace(/\s+/g, ' ');
+    // common mappings
+    s = s.replace(/special attack/, 'special-attack');
+    s = s.replace(/special defense/, 'special-defense');
+    s = s.replace(/sp\.atk|spatk/, 'special-attack');
+    s = s.replace(/sp\.def|spdef/, 'special-defense');
+    s = s.replace(/attack/, 'attack');
+    s = s.replace(/defense/, 'defense');
+    s = s.replace(/speed/, 'speed');
+    s = s.replace(/hp/, 'hp');
+    s = s.replace(/ /g, '-');
+    return s;
 }
 
-// START BATTLE
-function startBattle() {
-    document.getElementById('battle-container').style.display = 'flex';
-    document.getElementById('battle-log').style.display = 'block'; // show log
-    currentPoke1 = team1.shift();
-    currentPoke2 = team2.shift();
-    loadActivePokemon(1, currentPoke1);
-    loadActivePokemon(2, currentPoke2);
-}
+function parseAndApplyStatEffects(effectText, attacker, defender, playerWhoMoved, ui) {
+    if (!effectText) return;
+    const text = effectText.toLowerCase();
+    // convert written numbers to digits for one..six
+    const wordNums = { one:1, two:2, three:3, four:4, five:5, six:6 };
+    let normalized = text.replace(/\b(one|two|three|four|five|six)\b/g, (m)=>wordNums[m]);
 
-// LOAD ACTIVE POKEMON
-function loadActivePokemon(player, poke) {
-    const hpBar = document.getElementById(`healthBar${player}`);
-    const sprite = document.getElementById(`pokemonSprite${player}`);
-    const statsDiv = document.getElementById(`stats${player}`);
-    const typeDiv = document.getElementById(`type${player}`);
-    const movesContainer = document.getElementById(`moves${player}`);
-    const nameDisplay = document.getElementById(`pokemonNameDisplay${player}`);
-
-    if (player === 1) {
-        currentHp1 = poke.hpCurrent; maxHp1 = poke.hpMax; stats1 = poke.stats; types1 = poke.types;
-    } else {
-        currentHp2 = poke.hpCurrent; maxHp2 = poke.hpMax; stats2 = poke.stats; types2 = poke.types;
-    }
-
-    nameDisplay.textContent = poke.name.charAt(0).toUpperCase() + poke.name.slice(1);
-    hpBar.value = `HP: ${poke.hpCurrent} / ${poke.hpMax}`;
-    hpBar.style.display = 'block';
-    sprite.src = poke.sprite;
-    sprite.style.display = 'block';
-    statsDiv.innerHTML = Object.entries(poke.stats).map(([k, v]) => `${k.toUpperCase()}: ${v}`).join('<br>');
-    statsDiv.style.display = 'block';
-    typeDiv.innerHTML = `Type: ${poke.types.join(' / ')}`;
-    typeDiv.style.display = 'block';
-
-    renderMoves(movesContainer.id, poke.moves);
-}
-
-// RENDER MOVES
-async function renderMoves(containerId, moves) {
-    const container = document.getElementById(containerId);
-    container.innerHTML = "";
-    const isPoke1 = containerId === 'moves1';
-    const currentHp = isPoke1 ? currentHp1 : currentHp2;
-
-    // If a forced switch is pending, prevent move selection and show notice
-    if (waitingForSwitch) {
-        const waitingMsg = document.createElement('p');
-        waitingMsg.textContent = `Waiting for Player ${forcedSwitchPlayer} to switch (fainted).`;
-        container.appendChild(waitingMsg);
-        return;
-    }
-    if (currentHp <= 0)
-    {
-        container.innerHTML = '<p>This Pokémon has fainted!</p>'; return;
-    }
-
-    for (const move of moves) {
-        // Use cached details if present
-        let power = move.details?.power ?? null;
-        let moveType = move.details?.type ?? null;
-        let damageClass = move.details?.damage_class ?? null;
-        let effectText = move.details?.effect_text ?? null;
-
-        // Fallback: if no details attached, try fetching once (and cache)
-        if ((power === null && damageClass === null) && move.move && move.move.url) {
-            const url = move.move.url;
-            if (moveCache.has(url)) {
-                const d = moveCache.get(url);
-                power = d.power; moveType = d.type; damageClass = d.damage_class; effectText = d.effect_text;
-                move.details = d;
-            } else {
-                try {
-                    const moveRes = await fetch(url);
-                    const moveDetails = await moveRes.json();
-                    power = moveDetails.power ?? null;
-                    moveType = moveDetails.type?.name ?? null;
-                    damageClass = moveDetails.damage_class?.name ?? null;
-                    let et = null;
-                    if (Array.isArray(moveDetails.effect_entries)) {
-                        const en = moveDetails.effect_entries.find(e => e.language && e.language.name === 'en');
-                        if (en) et = en.short_effect || en.effect || null;
-                    }
-                    effectText = et;
-                    const d = { power, type: moveType, damage_class: damageClass, effect_text: effectText };
-                    move.details = d;
-                    moveCache.set(url, d);
-                } catch (e) {
-                    power = null; moveType = null; damageClass = null; effectText = null;
-                    const fallback = { power: null, type: null, damage_class: null, effect_text: null };
-                    move.details = fallback;
-                    moveCache.set(move.move.url, fallback);
-                }
-            }
+    // regex to capture (raise|lower|increase|decrease) [the] [user/target] 's? STAT by N
+    const re = /(raise|raises|raised|lower|lowers|lowered|increase|increases|increased|decrease|decreases|decreased)\s+(?:the\s+)?(?:(user|target|ally|opponent|enemy|foe)'?s?\s+)?([a-z \-]+?)\s+by\s+(\d+)/i;
+    const m = normalized.match(re);
+    if (m) {
+        const verb = m[1];
+        let who = m[2];
+        const statRaw = m[3];
+        const num = parseInt(m[4],10) || 0;
+        const statKey = normalizeStatName(statRaw);
+        if (!statKey) return;
+        // determine target: if who indicates user -> attacker, otherwise target/unspecified -> defender
+        let targetPoke = defender;
+        if (who) {
+            who = who.toLowerCase();
+            if (who.startsWith('user') || who.startsWith('ally')) targetPoke = attacker;
+            else targetPoke = defender;
         }
-
-        const isStatus = damageClass === 'status';
-        // Build hover text (title) showing power or effect only on hover
-        const hoverParts = [];
-        if (isStatus) {
-            if (effectText) hoverParts.push(`Effect: ${effectText}`);
-            else hoverParts.push('Effect: Status move');
-        } else {
-            hoverParts.push(`Power: ${power ?? 'N/A'}`);
-            if (moveType) hoverParts.push(`Type: ${moveType}`);
-        }
-        const hoverText = hoverParts.join(' | ');
-
-        const button = document.createElement("button");
-        // Display only the move name; details appear on hover via title
-        button.textContent = move.move.name;
-        button.title = hoverText;
-        button.setAttribute('aria-label', `${move.move.name}. ${hoverText}`);
-
-        // Determine if this move is currently selected for its player
-        const currentSelection = isPoke1 ? selectedAction1 : selectedAction2;
-        const isSelected = currentSelection && currentSelection.move && currentSelection.move.move && currentSelection.move.move.name === move.move.name;
-        if (isSelected) button.classList.add('selected-move');
-
-        button.onclick = async () => {
-            if (waitingForSwitch) return; // extra safety
-
-            // Toggle selection: clicking the same move again will deselect
-            if (isPoke1) {
-                if (selectedAction1 && selectedAction1.move && selectedAction1.move.move.name === move.move.name) {
-                    selectedAction1 = null;
-                } else {
-                    // Select this move
-                    if (isStatus) selectedAction1 = { type: "move", move, moveType, power: 0, isStatus: true, effectText };
-                    else selectedAction1 = { type: "move", move, moveType, power };
-                }
-            } else {
-                if (selectedAction2 && selectedAction2.move && selectedAction2.move.move.name === move.move.name) {
-                    selectedAction2 = null;
-                } else {
-                    if (isStatus) selectedAction2 = { type: "move", move, moveType, power: 0, isStatus: true, effectText };
-                    else selectedAction2 = { type: "move", move, moveType, power };
-                }
-            }
-
-            // Re-render both move lists to update selection visual state
-            renderMoves('moves1', currentPoke1.moves);
-            renderMoves('moves2', currentPoke2.moves);
-
-            // If both players have selections, execute the turn
-            if (selectedAction1 && selectedAction2) await executeTurn();
-        };
-        container.appendChild(button);
-    }
-
-    // Add cancel selection button if player has a current selection
-    const playerHasSelection = isPoke1 ? !!selectedAction1 : !!selectedAction2;
-    if (playerHasSelection) {
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel selection';
-        cancelBtn.className = 'cancel-selection';
-        cancelBtn.onclick = () => {
-            if (isPoke1) selectedAction1 = null; else selectedAction2 = null;
-            // Re-render to update UI
-            renderMoves('moves1', currentPoke1.moves);
-            renderMoves('moves2', currentPoke2.moves);
-        };
-        container.appendChild(cancelBtn);
+        // verb indicates raise or lower
+        const lowers = /lower|decrease|decreases|lowered/.test(verb);
+        const delta = lowers ? -num : num;
+        applyStatChange(targetPoke, statKey, delta, ui);
     }
 }
 
-// SHOW SWITCH MENU
-function showSwitchMenu(player) {
-    const menu = document.getElementById(`switch-menu${player}`);
-    menu.innerHTML = '';
-    const team = player === 1 ? team1 : team2;
+// ------------------ CLASS DEFINITIONS ------------------
+class Move {
+    constructor({ name, power, type, damageClass, effectText }) {
+        this.name = name;
+        this.power = power || 0;
+        this.type = type || null;
+        this.damageClass = damageClass || 'status';
+        this.effectText = effectText || '';
+    }
 
-    team.forEach((poke, index) => {
-        if (poke.hpCurrent > 0) {
+    isStatus() {
+        return this.damageClass === 'status';
+    }
+
+    calculateDamage(attacker, defender, typeEffectiveness = 1) {
+        if (this.isStatus()) return 0;
+        const stab = attacker.types.includes(this.type) ? 1.5 : 1;
+        return calculateDamage(50, attacker.stats.attack, this.power, defender.stats.defense, stab, typeEffectiveness);
+    }
+}
+
+class Pokemon {
+    constructor({ name, sprite, stats, types, moves }) {
+        this.name = name;
+        this.sprite = sprite;
+        this.stats = stats;
+        this.types = types;
+        this.moves = moves.map(m => new Move(m));
+        this.hpMax = stats.hp;
+        this.hpCurrent = stats.hp;
+        // track stat stages per stat key (same keys as stats object)
+        this.statStages = {};
+        Object.keys(stats).forEach(k => this.statStages[k] = 0);
+    }
+
+    takeDamage(amount) {
+        this.hpCurrent = Math.max(0, this.hpCurrent - amount);
+    }
+
+    isFainted() {
+        return this.hpCurrent <= 0;
+    }
+}
+
+class UI {
+    constructor() {
+        this.logContainer = document.getElementById('battle-log');
+    }
+
+    updateHp(pokemon, player) {
+        const bar = document.getElementById(`healthBar${player}`);
+        bar.value = `HP: ${pokemon.hpCurrent} / ${pokemon.hpMax}`;
+        bar.style.display = 'block';
+    }
+
+    renderPokemon(pokemon, player) {
+        document.getElementById(`pokemonNameDisplay${player}`).textContent = pokemon.name;
+        document.getElementById(`pokemonSprite${player}`).src = pokemon.sprite;
+        const statsDiv = document.getElementById(`stats${player}`);
+        // show stat stages next to stat values
+        statsDiv.innerHTML = Object.entries(pokemon.stats)
+            .map(([k, v]) => {
+                const stage = pokemon.statStages && pokemon.statStages[k] ? pokemon.statStages[k] : 0;
+                const stageLabel = stage !== 0 ? ` (${stage > 0 ? '+' : ''}${stage})` : '';
+                return `${k.toUpperCase()}: ${v}${stageLabel}`;
+            })
+            .join('<br>');
+        document.getElementById(`type${player}`).textContent = `Type: ${pokemon.types.join(' / ')}`;
+        this.updateHp(pokemon, player);
+        this.renderMoves(pokemon, player);
+    }
+
+    renderMoves(pokemon, player) {
+        const container = document.getElementById(`moves${player}`);
+        container.innerHTML = '';
+        pokemon.moves.forEach(move => {
             const btn = document.createElement('button');
-            btn.style.display = 'flex';
-            btn.style.flexDirection = 'column';
-            btn.style.alignItems = 'center';
-            btn.style.gap = '4px';
+            btn.textContent = move.name;
+            btn.title = move.isStatus() ? `Status: ${move.effectText}` : `Power: ${move.power} | Type: ${move.type}`;
+            btn.onclick = () => Battle.instance.selectMove(player, move);
+            container.appendChild(btn);
+        });
+    }
 
-            const nameDiv = document.createElement('div');
-            nameDiv.textContent = poke.name.charAt(0).toUpperCase() + poke.name.slice(1);
-            btn.appendChild(nameDiv);
+    // allow optional color for log entries
+    log(message, color = null) {
+        const p = document.createElement('p');
+        p.textContent = message;
+        if (color) p.style.color = color;
+        this.logContainer.appendChild(p);
+        this.logContainer.scrollTop = this.logContainer.scrollHeight;
+    }
 
+    showPopup(msg) {
+        document.querySelector("#popup p").textContent = msg;
+        document.getElementById("popup").style.display = "flex";
+    }
+
+    closePopup() {
+        document.getElementById("popup").style.display = "none";
+    }
+
+    renderSwitchMenu(team, player, onSelect, forForced = false) {
+        const menu = document.getElementById(`switch-menu${player}`);
+        menu.innerHTML = '';
+        team.forEach((poke, index) => {
+            if (poke.hpCurrent <= 0) return;
+            const btn = document.createElement('button');
+            // create a container so image and name align
             const img = document.createElement('img');
             img.src = poke.sprite;
             img.alt = poke.name;
             img.width = 60; img.height = 60;
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = poke.name;
             btn.appendChild(img);
-
-            // If this team member is currently selected for switch, mark it
-            const currentSel = player === 1 ? selectedAction1 : selectedAction2;
-            if (currentSel && currentSel.type === 'switch' && currentSel.index === index)
-            {
-                btn.classList.add('selected-switch');
-            }
+            btn.appendChild(nameSpan);
 
             btn.onclick = () => {
-                // If this is a forced switch due to faint, perform it immediately and end the pending turn
-                if (waitingForSwitch && forcedSwitchPlayer === player)
-                {
-                    menu.style.display = 'none';
-                    addToBattleLog(`${poke.name} was switched in due to faint.`);
-                    switchActivePokemon(player, index);
-
-                    // Clear forced switch state and any selected actions so the opponent cannot act this turn
-                    waitingForSwitch = false;
-                    forcedSwitchPlayer = null;
-                    selectedAction1 = null; selectedAction2 = null;
-
-                    // Re-render UI
-                    renderMoves('moves1', currentPoke1.moves);
-                    renderMoves('moves2', currentPoke2.moves);
-                    return;
-                }
-
-                // Normal switch selection during a turn: toggle selection if same index clicked
-                const prevSel = player === 1 ? selectedAction1 : selectedAction2;
-                if (prevSel && prevSel.type === 'switch' && prevSel.index === index)
-                {
-                    // Deselect
-                    if (player === 1)
-                    {
-                        selectedAction1 = null;
-                    }
-                    else
-                    {
-                        selectedAction2 = null;
-                    }
-                    addToBattleLog(`${poke.name} switch cancelled.`);
-                }
-                else
-                {
-                    // Select this pokemon to switch
-                    if (player === 1)
-                    {
-                        selectedAction1 = { type: "switch", index: index };
-                        switched = true;
-                    }
-                    else
-                    {
-                        selectedAction2 = { type: "switch", index: index };
-                        switched = true;
-                    }
-                }
-
                 menu.style.display = 'none';
-
-                // If both players have selections, execute the turn
-                if (selectedAction1 && selectedAction2)
-                {
-                    executeTurn()
-                    if (switched === true)
-                    {
-                        addToBattleLog(`${poke.name} switched in!`);
-                        switched = false;
-                    }
-                }
-                else
-                {
-                    // Update moves UI to reflect selection state
-                    renderMoves('moves1', currentPoke1.moves);
-                    renderMoves('moves2', currentPoke2.moves);
+                if (forForced) {
+                    onSelect(index);
+                } else {
+                    onSelect(index);
                 }
             };
             menu.appendChild(btn);
+        });
+        menu.style.display = 'flex';
+    }
+}
+
+class Battle {
+    constructor(team1, team2, ui) {
+        this.team1 = team1;
+        this.team2 = team2;
+        this.ui = ui;
+        this.currentPoke1 = this.team1.shift();
+        this.currentPoke2 = this.team2.shift();
+        this.selectedMoves = { 1: null, 2: null };
+        this.turn = 0; // add turn counter
+        Battle.instance = this;
+        this.startBattle();
+    }
+
+    startBattle() {
+        document.getElementById('team-selection').style.display = 'none';
+        document.getElementById('battle-container').style.display = 'flex';
+        document.getElementById('battle-log').style.display = 'block';
+        this.ui.renderPokemon(this.currentPoke1, 1);
+        this.ui.renderPokemon(this.currentPoke2, 2);
+    }
+
+    selectMove(player, move) {
+        this.selectedMoves[player] = move;
+        if (this.selectedMoves[1] && this.selectedMoves[2]) {
+            this.executeTurn();
         }
-    });
-
-    // Add a cancel button to allow clearing a previously chosen switch without selecting a new one
-    const currentSel = player === 1 ? selectedAction1 : selectedAction2;
-    if (currentSel && currentSel.type === 'switch') {
-        const cancelBtn = document.createElement('button');
-        cancelBtn.textContent = 'Cancel switch selection';
-        cancelBtn.className = 'cancel-switch';
-        cancelBtn.onclick = () => {
-            if (player === 1) selectedAction1 = null; else selectedAction2 = null;
-            menu.style.display = 'none';
-            addToBattleLog(`Player ${player} cancelled their switch selection.`);
-            renderMoves('moves1', currentPoke1.moves);
-            renderMoves('moves2', currentPoke2.moves);
-        };
-        menu.appendChild(cancelBtn);
     }
 
-    menu.style.display = 'flex';
-}
+    async executeTurn() {
+        // increment and display turn counter in the battle log
+        this.turn++;
+        this.ui.log(`--- Turn ${this.turn} ---`);
+        const speed1 = this.currentPoke1.stats.speed;
+        const speed2 = this.currentPoke2.stats.speed;
+        const firstPlayer = speed1 >= speed2 ? 1 : 2;
+        const secondPlayer = firstPlayer === 1 ? 2 : 1;
 
-// SWITCH ACTIVE POKEMON
-function switchActivePokemon(player, teamIndex) {
-    const team = player === 1 ? team1 : team2;
-    const newPoke = team.splice(teamIndex, 1)[0];
-    const oldPoke = player === 1 ? currentPoke1 : currentPoke2;
-    if ((player === 1 ? currentHp1 : currentHp2) > 0) team.push(oldPoke);
+        await this.handleMove(firstPlayer, this.selectedMoves[firstPlayer]);
+        if (!this.currentPoke1.isFainted() && !this.currentPoke2.isFainted()) {
+            await this.handleMove(secondPlayer, this.selectedMoves[secondPlayer]);
+        }
 
-    if (player === 1)
-    {
-        currentPoke1 = newPoke; currentHp1 = newPoke.hpCurrent; maxHp1 = newPoke.hpMax; stats1 = newPoke.stats; types1 = newPoke.types; loadActivePokemon(1, newPoke);
-    }
-    else
-    {
-        currentPoke2 = newPoke; currentHp2 = newPoke.hpCurrent; maxHp2 = newPoke.hpMax; stats2 = newPoke.stats; types2 = newPoke.types; loadActivePokemon(2, newPoke);
-    }
-}
-
-// EXECUTE TURN
-async function executeTurn() {
-    turnCounter++;
-    addToBattleLog(`--- Turn ${turnCounter} ---`);
-
-    const speed1 = currentPoke1.stats.speed;
-    const speed2 = currentPoke2.stats.speed;
-
-    let firstAction, secondAction, firstPlayer, secondPlayer;
-
-    if (selectedAction1.type === "switch" && selectedAction2.type !== "switch") {
-        firstAction = selectedAction1; firstPlayer = 1;
-        secondAction = selectedAction2; secondPlayer = 2;
-    } else if (selectedAction2.type === "switch" && selectedAction1.type !== "switch") {
-        firstAction = selectedAction2; firstPlayer = 2;
-        secondAction = selectedAction1; secondPlayer = 1;
-    } else if (speed1 >= speed2) {
-        firstAction = selectedAction1; firstPlayer = 1;
-        secondAction = selectedAction2; secondPlayer = 2;
-    } else {
-        firstAction = selectedAction2; firstPlayer = 2;
-        secondAction = selectedAction1; secondPlayer = 1;
+        this.selectedMoves = { 1: null, 2: null };
     }
 
-    // FIRST ACTION
-    const fainted = await handleAction(firstPlayer, firstAction);
+    async handleMove(player, action) {
+        if (!action) return;
+        // If action is a switch
+        if (action.type === 'switch') {
+            this.performSwitch(player, action.index);
+            this.ui.log(`${player === 1 ? this.currentPoke1.name : this.currentPoke2.name} switched in!`);
+            return;
+        }
 
-    // SECOND ACTION
-    if (fainted) {
-        addToBattleLog(`Turn ends because a Pokémon fainted. The opponent cannot act this turn.`);
-    } else {
-        await handleAction(secondPlayer, secondAction);
+        // Otherwise it's a Move instance
+        const move = action;
+        const attacker = player === 1 ? this.currentPoke1 : this.currentPoke2;
+        const defender = player === 1 ? this.currentPoke2 : this.currentPoke1;
+
+        if (move.isStatus()) {
+            this.ui.log(`${attacker.name} used ${move.name} (status): ${move.effectText}....coming soon`);
+            // parse and apply any stat effects from the status move
+            parseAndApplyStatEffects(move.effectText, attacker, defender, player, this.ui);
+            return;
+        }
+
+        const typeEffectiveness = await getTypeEffectiveness(move.type, defender.types);
+        const damage = move.calculateDamage(attacker, defender, typeEffectiveness);
+        defender.takeDamage(damage);
+        this.ui.updateHp(defender, player === 1 ? 2 : 1);
+        // Log the attack
+        this.ui.log(`${attacker.name} used ${move.name} (-${damage} HP)`);
+
+        // Log effectiveness message with appropriate color
+        if (typeEffectiveness === 0) {
+            this.ui.log("It had no effect.", 'gray');
+        } else if (typeEffectiveness > 1) {
+            this.ui.log("It's super effective!", 'green');
+        } else if (typeEffectiveness < 1) {
+            this.ui.log("It's not very effective...", 'red');
+        }
+
+        // parse and apply any stat effects from move (works for damage moves that have secondary effects)
+        parseAndApplyStatEffects(move.effectText, attacker, defender, player, this.ui);
+
+        if (defender.isFainted()) {
+            this.ui.log(`${defender.name} fainted!`);
+            await this.forcedSwitch(player === 1 ? 2 : 1);
+        }
     }
 
-    selectedAction1 = null;
-    selectedAction2 = null;
+    performSwitch(player, index) {
+        const team = player === 1 ? this.team1 : this.team2;
+        const newPoke = team.splice(index, 1)[0];
+        const oldPoke = player === 1 ? this.currentPoke1 : this.currentPoke2;
+        // only put back the old poke into the team if it hasn't fainted
+        if (!oldPoke.isFainted()) team.push(oldPoke);
 
-    renderMoves('moves1', currentPoke1.moves);
-    renderMoves('moves2', currentPoke2.moves);
-}
-
-// HANDLE ACTION
-async function handleAction(player, action) {
-    if (!action) return false;
-    if (action.type === "move") return await attack(player, action);
-    else if (action.type === "switch") switchActivePokemon(player, action.index);
-    return false;
-}
-
-// ATTACK FUNCTION
-async function attack(player, move) {
-    // move may be the selectedAction structure, normalize
-    const selected = move;
-    const attackerStats = player === 1 ? stats1 : stats2;
-    const defenderStats = player === 1 ? stats2 : stats1;
-    const attackerTypes = player === 1 ? types1 : types2;
-    const defenderTypes = player === 1 ? types2 : types1;
-    const moveName = selected.move.move.name;
-
-    // Handle status moves
-    const isStatusMove = selected.isStatus || selected.move.details?.damage_class === 'status' || selected.move.details?.damage_class === 'status';
-    if (isStatusMove) {
-        const effectText = selected.effectText ?? selected.move.details?.effect_text ?? 'Status effect.';
-        if (player === 1) addToBattleLog(`${currentPoke1.name} used ${moveName} (status): ${effectText}`);
-        else addToBattleLog(`${currentPoke2.name} used ${moveName} (status): ${effectText}`);
-        return false; // no faint
+        if (player === 1) {
+            this.currentPoke1 = newPoke;
+            this.ui.renderPokemon(newPoke, 1);
+        } else {
+            this.currentPoke2 = newPoke;
+            this.ui.renderPokemon(newPoke, 2);
+        }
     }
 
-    const movePower = selected.power ?? selected.move.details?.power ?? 0;
-    const moveType = selected.moveType ?? selected.move.details?.type ?? null;
+    async forcedSwitch(player) {
+        const team = player === 1 ? this.team1 : this.team2;
+        if (team.length === 0) {
+            this.ui.showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
+            return;
+        }
 
-    const stab = attackerTypes.includes(moveType) ? 1.5 : 1;
-    const typeEffectiveness = await getTypeEffectiveness(moveType, defenderTypes);
-    const damage = calculateDamage(50, attackerStats.attack, movePower, defenderStats.defense, stab, typeEffectiveness);
-
-    if (player === 1) {
-        currentHp2 = Math.max(0, currentHp2 - damage);
-        updateHpBar('healthBar2', currentHp2, maxHp2);
-        addToBattleLog(`${currentPoke1.name} used ${moveName} (-${damage} damage!)`);
-        if (currentHp2 === 0) { addToBattleLog(`${currentPoke2.name} fainted!`); switchNextPokemon(2); return true; }
-    } else {
-        currentHp1 = Math.max(0, currentHp1 - damage);
-        updateHpBar('healthBar1', currentHp1, maxHp1);
-        addToBattleLog(`${currentPoke2.name} used ${moveName} (-${damage} damage!)`);
-        if (currentHp1 === 0) { addToBattleLog(`${currentPoke1.name} fainted!`); switchNextPokemon(1); return true; }
+        this.ui.log(`Player ${player}, choose a Pokémon to switch in!`);
+        // For forced switch we immediately swap when selection is made
+        this.ui.renderSwitchMenu(team, player, (index) => {
+            const newPoke = team.splice(index, 1)[0];
+            if (player === 1) this.currentPoke1 = newPoke;
+            else this.currentPoke2 = newPoke;
+            this.ui.renderPokemon(newPoke, player);
+            this.ui.log(`${newPoke.name} was sent out!`);
+            document.getElementById(`switch-menu${player}`).style.display = 'none';
+        }, true);
     }
 
-    return false;
-}
-
-// SWITCH AFTER FAINT
-function switchNextPokemon(player) {
-    const team = player === 1 ? team1 : team2;
-    if (team.length > 0) {
-        waitingForSwitch = true;
-        forcedSwitchPlayer = player;
-
-        selectedAction1 = null; selectedAction2 = null;
-
-        showSwitchMenu(player);
-    } else {
-        showPopup(player === 1 ? "Player 2 wins!" : "Player 1 wins!");
+    manualSwitch(player) {
+        const team = player === 1 ? this.team1 : this.team2;
+        // When manually switching, selecting a Pokemon will set the selected action to a switch
+        this.ui.renderSwitchMenu(team, player, (index) => {
+            // set as selected action to consume this player's turn
+            this.selectedMoves[player] = { type: 'switch', index };
+            document.getElementById(`switch-menu${player}`).style.display = 'none';
+            this.ui.log(`Player ${player} selected a switch.`);
+            if (this.selectedMoves[1] && this.selectedMoves[2]) this.executeTurn();
+        }, false);
     }
 }
 
-console.log("Simon Was Here");
+// ------------------ FETCH FUNCTIONS ------------------
+const moveCache = new Map();
+
+async function fetchPokemon(name) {
+    try {
+        const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name.toLowerCase()}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        const level = 50;
+        const stats = {};
+        data.stats.forEach(s => stats[s.stat.name] = calculateStat(s.base_stat, level, 31, 0, s.stat.name === 'hp'));
+        const moves = data.moves.slice(0, 4).map(m => ({
+            name: m.move.name,
+            url: m.move.url
+        }));
+        const detailedMoves = await Promise.all(moves.map(async m => {
+            if (moveCache.has(m.url)) return moveCache.get(m.url);
+            const res = await fetch(m.url);
+            const d = await res.json();
+            const moveData = new Move({
+                name: m.name,
+                power: d.power,
+                type: d.type?.name,
+                damageClass: d.damage_class?.name,
+                effectText: d.effect_entries?.find(e => e.language.name === 'en')?.short_effect || ''
+            });
+            moveCache.set(m.url, moveData);
+            return moveData;
+        }));
+
+        return new Pokemon({
+            name: data.name,
+            sprite: data.sprites.front_default,
+            stats,
+            types: data.types.map(t => t.type.name),
+            moves: detailedMoves
+        });
+    } catch { return null; }
+}
+
+// ------------------ TEAM SUBMISSION ------------------
+async function submitTeam(player) {
+    const team = [];
+    for (let i = 1; i <= 6; i++) {
+        const input = document.getElementById(`team${player}-poke${i}`);
+        const name = input.value.trim();
+        if (!name) continue;
+        const poke = await fetchPokemon(name);
+        if (poke) team.push(poke);
+    }
+    if (team.length === 0) return alert(`Player ${player} must select at least 1 Pokémon.`);
+    if (player === 1) window.team1 = team;
+    else window.team2 = team;
+
+    if (window.team1 && window.team2) new Battle(window.team1, window.team2, new UI());
+}
+
+async function randomizeTeam(player) {
+    for (let i = 1; i <= 6; i++) {
+        const input = document.getElementById(`team${player}-poke${i}`);
+        try {
+            const randomId = Math.floor(Math.random() * 1025) + 1;
+            const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${randomId}`);
+            if (!res.ok) { input.value = ''; continue; }
+            const data = await res.json();
+            input.value = data.name;
+        } catch {
+            input.value = '';
+        }
+    }
+}
+
+// ------------------ GLOBAL SWITCH BUTTONS ------------------
+window.manualSwitch = (player) => {
+    if (Battle.instance) Battle.instance.manualSwitch(player);
+}

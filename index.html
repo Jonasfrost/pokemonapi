@@ -11,29 +11,25 @@
     <!-- TEAM SELECTION -->
     <div class="team-selection" id="team-selection">
         <h2>Player 1: Choose your team</h2>
-        <div id="team1-selection">
-            <div class="team-inputs">
-                <input type="text" id="team1-poke1" placeholder="Pokémon 1">
-                <input type="text" id="team1-poke2" placeholder="Pokémon 2">
-                <input type="text" id="team1-poke3" placeholder="Pokémon 3">
-                <input type="text" id="team1-poke4" placeholder="Pokémon 4">
-                <input type="text" id="team1-poke5" placeholder="Pokémon 5">
-                <input type="text" id="team1-poke6" placeholder="Pokémon 6">
-            </div>
+        <div id="team1-selection" class="team-inputs">
+            <input type="text" id="team1-poke1" placeholder="Pokémon 1">
+            <input type="text" id="team1-poke2" placeholder="Pokémon 2">
+            <input type="text" id="team1-poke3" placeholder="Pokémon 3">
+            <input type="text" id="team1-poke4" placeholder="Pokémon 4">
+            <input type="text" id="team1-poke5" placeholder="Pokémon 5">
+            <input type="text" id="team1-poke6" placeholder="Pokémon 6">
             <button onclick="randomizeTeam(1)">Randomize Team</button>
             <button onclick="submitTeam(1)">Submit Team</button>
         </div>
 
         <h2>Player 2: Choose your team</h2>
-        <div id="team2-selection">
-            <div class="team-inputs">
-                <input type="text" id="team2-poke1" placeholder="Pokémon 1">
-                <input type="text" id="team2-poke2" placeholder="Pokémon 2">
-                <input type="text" id="team2-poke3" placeholder="Pokémon 3">
-                <input type="text" id="team2-poke4" placeholder="Pokémon 4">
-                <input type="text" id="team2-poke5" placeholder="Pokémon 5">
-                <input type="text" id="team2-poke6" placeholder="Pokémon 6">
-            </div>
+        <div id="team2-selection" class="team-inputs">
+            <input type="text" id="team2-poke1" placeholder="Pokémon 1">
+            <input type="text" id="team2-poke2" placeholder="Pokémon 2">
+            <input type="text" id="team2-poke3" placeholder="Pokémon 3">
+            <input type="text" id="team2-poke4" placeholder="Pokémon 4">
+            <input type="text" id="team2-poke5" placeholder="Pokémon 5">
+            <input type="text" id="team2-poke6" placeholder="Pokémon 6">
             <button onclick="randomizeTeam(2)">Randomize Team</button>
             <button onclick="submitTeam(2)">Submit Team</button>
         </div>
@@ -52,7 +48,7 @@
             <div id="stats1" class="stats-container"></div>
             <div id="type1" class="type-container"></div>
             <div id="moves1" class="moves-container"></div>
-            <button onclick="showSwitchMenu(1)">Switch Pokémon</button>
+            <button onclick="manualSwitch(1)">Switch Pokémon</button>
             <div id="switch-menu1" class="switch-menu"></div>
         </div>
 
@@ -66,7 +62,7 @@
             <div id="stats2" class="stats-container"></div>
             <div id="type2" class="type-container"></div>
             <div id="moves2" class="moves-container"></div>
-            <button onclick="showSwitchMenu(2)">Switch Pokémon</button>
+            <button onclick="manualSwitch(2)">Switch Pokémon</button>
             <div id="switch-menu2" class="switch-menu"></div>
         </div>
     </div>
@@ -78,7 +74,7 @@
     <div class="popup-overlay" id="popup">
         <div class="popup-box">
             <p>Pokemon not found!</p>
-            <button onclick="closePopup()">OK</button>
+            <button onclick="UI.prototype.closePopup()">OK</button>
         </div>
     </div>
 

@@ -1,16 +1,19 @@
 ﻿body {
+    font-family: sans-serif;
+    margin: 0;
+    padding: 0;
 }
 
 .team-selection {
     margin: 20px;
 }
 
-    .team-selection .team-inputs {
-        display: flex;
-        flex-direction: column;
-        gap: 8px; 
-        margin-bottom: 10px;
-    }
+.team-inputs {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 10px;
+}
 
 .pokemon-name-display {
     font-weight: bold;
@@ -57,7 +60,7 @@ input[readonly][id^="healthBar"] {
     display: none;
 }
 
-/*popup til error*/
+/*popup*/
 .popup-overlay {
     position: fixed;
     top: 0;
@@ -90,47 +93,6 @@ input[readonly][id^="healthBar"] {
         cursor: pointer;
     }
 
-healthBar {
-    width: 300px;
-    padding: 20px;
-    border: 2px solid #333;
-    border-radius: 8px;
-    font-size: 18px;
-    font-family: sans-serif;
-    margin: 20px auto;
-    text-align: center;
-}
-
-/*random pokemon*/
-.random-pokemon {
-    display: block;
-    margin: 20px auto;
-    padding: 10px 20px;
-    font-size: 16px;
-    border: none;
-    border-radius: 6px;
-    background-color: #3498db;
-    color: white;
-    cursor: pointer;
-    transition: background-color 0.3s;
-}
-    .random-pokemon button {
-        padding: 8px 12px;
-        font-size: 16px;
-        border: 1px solid #888;
-        border-radius: 6px;
-        background-color: #eee;
-        cursor: pointer;
-        font-family: sans-serif;
-        text-transform: capitalize;
-        transition: 0.2s;
-    }
-        .random-pokemon button:hover {
-            background-color: #ddd;
-        }
-    
-
-/*moves*/
 .moves-container {
     margin-top: 10px;
     display: flex;
@@ -171,16 +133,13 @@ healthBar {
     }
 
 .type-container {
-    position: static;
     margin: 6px 0;
-    z-index: auto;
     background: rgba(255,255,255,0.85);
     padding: 4px 10px;
     border-radius: 6px;
     font-weight: bold;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
-    pointer-events: none;
 }
+
 .battle-log {
     display: none;
     width: 80%;
@@ -195,6 +154,7 @@ healthBar {
     font-family: sans-serif;
     font-size: 14px;
 }
+
 .switch-menu {
     display: flex;
     gap: 10px;
@@ -209,15 +169,12 @@ healthBar {
         background-color: #eee;
         cursor: pointer;
         text-transform: capitalize;
-        font-family: sans-serif;
     }
 
         .switch-menu button:hover {
             background-color: #ddd;
         }
 
-
-    .battle-log p {
-        margin: 4px 0;
-    }
-
+.battle-log p {
+    margin: 4px 0;
+}
