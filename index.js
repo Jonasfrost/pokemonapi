@@ -49,7 +49,10 @@ function normalizeStatName(raw) {
 }
 
 function parseAndApplyStatEffects(effectText, attacker, defender, playerWhoMoved, ui) {
-    if (!effectText) return;
+    if (!effectText)
+    {
+        return;
+    }
     const text = effectText.toLowerCase();
     // convert written numbers to digits for one..six
     const wordNums = { one:1, two:2, three:3, four:4, five:5, six:6 };
@@ -58,19 +61,30 @@ function parseAndApplyStatEffects(effectText, attacker, defender, playerWhoMoved
     // regex to capture (raise|lower|increase|decrease) [the] [user/target] 's? STAT by N
     const re = /(raise|raises|raised|lower|lowers|lowered|increase|increases|increased|decrease|decreases|decreased)\s+(?:the\s+)?(?:(user|target|ally|opponent|enemy|foe)'?s?\s+)?([a-z \-]+?)\s+by\s+(\d+)/i;
     const m = normalized.match(re);
-    if (m) {
+    if (m)
+    {
         const verb = m[1];
         let who = m[2];
         const statRaw = m[3];
         const num = parseInt(m[4],10) || 0;
         const statKey = normalizeStatName(statRaw);
-        if (!statKey) return;
+        if (!statKey)
+        {
+            return;
+        }
         // determine target: if who indicates user -> attacker, otherwise target/unspecified -> defender
         let targetPoke = defender;
-        if (who) {
+        if (who)
+        {
             who = who.toLowerCase();
-            if (who.startsWith('user') || who.startsWith('ally')) targetPoke = attacker;
-            else targetPoke = defender;
+            if (who.startsWith('user') || who.startsWith('ally'))
+            {
+                targetPoke = attacker;
+            }
+            else
+            {
+                targetPoke = defender;
+            }
         }
         // verb indicates raise or lower
         const lowers = /lower|decrease|decreases|lowered/.test(verb);
@@ -98,7 +112,7 @@ class Move {
         const stab = attacker.types.includes(this.type) ? 1.5 : 1;
         return calculateDamage(50, attacker.stats.attack, this.power, defender.stats.defense, stab, typeEffectiveness);
     }
-}
+} 
 
 class Pokemon {
     constructor({ name, sprite, stats, types, moves }) {
@@ -243,14 +257,50 @@ class Battle {
         // increment and display turn counter in the battle log
         this.turn++;
         this.ui.log(`--- Turn ${this.turn} ---`);
+
+        // If either player selected a switch, perform switches first (always)
+        const isSwitch1 = this.selectedMoves[1] && this.selectedMoves[1].type === 'switch';
+        const isSwitch2 = this.selectedMoves[2] && this.selectedMoves[2].type === 'switch';
+
+        if (isSwitch1 || isSwitch2) {
+            // perform switches in a deterministic order (player 1 then player 2)
+            if (isSwitch1) {
+                const action = this.selectedMoves[1];
+                this.performSwitch(1, action.index);
+                this.ui.log(`${this.currentPoke1.name} switched in!`);
+            }
+            if (isSwitch2) {
+                const action = this.selectedMoves[2];
+                this.performSwitch(2, action.index);
+                this.ui.log(`${this.currentPoke2.name} switched in!`);
+            }
+
+            // clear the switch selections (they consumed the turn)
+            if (isSwitch1) this.selectedMoves[1] = null;
+            if (isSwitch2) this.selectedMoves[2] = null;
+
+            // If both players switched, the turn ends here
+            if (!this.selectedMoves[1] && !this.selectedMoves[2]) {
+                this.selectedMoves = { 1: null, 2: null };
+                return;
+            }
+            // otherwise continue to resolve remaining move(s)
+        }
+
+        // determine order for remaining moves based on speed (recompute since switches may have changed active Pokémon)
         const speed1 = this.currentPoke1.stats.speed;
         const speed2 = this.currentPoke2.stats.speed;
         const firstPlayer = speed1 >= speed2 ? 1 : 2;
         const secondPlayer = firstPlayer === 1 ? 2 : 1;
 
-        await this.handleMove(firstPlayer, this.selectedMoves[firstPlayer]);
+        if (this.selectedMoves[firstPlayer]) {
+            await this.handleMove(firstPlayer, this.selectedMoves[firstPlayer]);
+        }
+
         if (!this.currentPoke1.isFainted() && !this.currentPoke2.isFainted()) {
-            await this.handleMove(secondPlayer, this.selectedMoves[secondPlayer]);
+            if (this.selectedMoves[secondPlayer]) {
+                await this.handleMove(secondPlayer, this.selectedMoves[secondPlayer]);
+            }
         }
 
         this.selectedMoves = { 1: null, 2: null };
@@ -366,7 +416,10 @@ async function fetchPokemon(name) {
             url: m.move.url
         }));
         const detailedMoves = await Promise.all(moves.map(async m => {
-            if (moveCache.has(m.url)) return moveCache.get(m.url);
+            if (moveCache.has(m.url))
+            {
+                return moveCache.get(m.url);
+            }
             const res = await fetch(m.url);
             const d = await res.json();
             const moveData = new Move({
