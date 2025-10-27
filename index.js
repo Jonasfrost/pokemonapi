@@ -48,40 +48,34 @@ function normalizeStatName(raw) {
     return s;
 }
 function parseAndApplyStatEffects(effectText, attacker, defender, playerWhoMoved, ui) {
-    if (!effectText)
-    {
+    if (!effectText) {
         return;
     }
     const text = effectText.toLowerCase();
     // convert written numbers to digits for one..six
-    const wordNums = { one:1, two:2, three:3, four:4, five:5, six:6 };
-    let normalized = text.replace(/\b(one|two|three|four|five|six)\b/g, (m)=>wordNums[m]);
+    const wordNums = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+    let normalized = text.replace(/\b(one|two|three|four|five|six)\b/g, (m) => wordNums[m]);
 
     // regex to capture (raise|lower|increase|decrease) [the] [user/target] 's? STAT by N
     const re = /(raise|raises|raised|lower|lowers|lowered|increase|increases|increased|decrease|decreases|decreased)\s+(?:the\s+)?(?:(user|target|ally|opponent|enemy|foe)'?s?\s+)?([a-z \-]+?)\s+by\s+(\d+)/i;
     const m = normalized.match(re);
-    if (m)
-    {
+    if (m) {
         const verb = m[1];
         let who = m[2];
         const statRaw = m[3];
-        const num = parseInt(m[4],10) || 0;
+        const num = parseInt(m[4], 10) || 0;
         const statKey = normalizeStatName(statRaw);
-        if (!statKey)
-        {
+        if (!statKey) {
             return;
         }
         // determine target: if who indicates user -> attacker, otherwise target/unspecified -> defender
         let targetPoke = defender;
-        if (who)
-        {
+        if (who) {
             who = who.toLowerCase();
-            if (who.startsWith('user') || who.startsWith('ally'))
-            {
+            if (who.startsWith('user') || who.startsWith('ally')) {
                 targetPoke = attacker;
             }
-            else
-            {
+            else {
                 targetPoke = defender;
             }
         }
@@ -124,6 +118,28 @@ function hpColorForPercent(pct) {
     return `rgb(${red.join(',')})`;
 }
 
+// Calculate miss chance
+function miss(move, attacker = null, defender = null, ui = null) {
+    if (!move) return false;
+
+    if (move.accuracy === null || typeof move.accuracy === 'undefined') return false;
+
+    const accuracy = Number(move.accuracy) || 0;
+
+    const acc = Math.max(0, Math.min(100, accuracy));
+
+    const roll = Math.floor(Math.random() * 100) + 1;
+
+    const didMiss = roll > acc;
+
+    if (didMiss && ui && typeof ui.log === 'function') {
+        if (attacker && defender) ui.log(`${attacker.name}'s ${move.name} missed ${defender.name}!`, 'gray');
+        else ui.log(`${move.name} missed!`, 'gray');
+    }
+
+    return didMiss;
+}
+
 // ------------------ CLASS DEFINITIONS ------------------
 class Move {
     constructor({ name, power, type, damageClass, effectText, priority }) {
@@ -144,7 +160,9 @@ class Move {
         const stab = attacker.types.includes(this.type) ? 1.5 : 1;
         return calculateDamage(50, attacker.stats.attack, this.power, defender.stats.defense, stab, typeEffectiveness);
     }
-} 
+
+
+}
 
 class Pokemon {
     constructor({ name, sprite, stats, types, moves }) {
@@ -187,7 +205,7 @@ class UI {
         const rgb = bg.match(/\d+/g).map(Number);
         const luminance = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]);
         bar.style.color = luminance > 150 ? '#000' : '#fff';
-    } 
+    }
 
     renderPokemon(pokemon, player) {
         document.getElementById(`pokemonNameDisplay${player}`).textContent = pokemon.name;
@@ -348,6 +366,7 @@ class Battle {
             const prio1 = move1.priority || 0;
             const prio2 = move2.priority || 0;
             let firstPlayer, secondPlayer;
+
             if (prio1 > prio2) {
                 firstPlayer = 1; secondPlayer = 2;
             } else if (prio2 > prio1) {
@@ -370,7 +389,6 @@ class Battle {
                 }
             }
         }
-
         this.selectedMoves = { 1: null, 2: null };
     }
 
@@ -387,6 +405,19 @@ class Battle {
         const move = action;
         const attacker = player === 1 ? this.currentPoke1 : this.currentPoke2;
         const defender = player === 1 ? this.currentPoke2 : this.currentPoke1;
+
+        // Check if the move misses before proceeding
+        const didMiss = miss(move, attacker, defender, this.ui);
+        if (didMiss) {
+            move.power = 0;
+            console.log(`${attacker.name}'s ${move.name} missed!`);
+            this.ui.log(`${attacker.name}'s ${move.name} missed!`, 'gray');
+            return;
+        }
+        else
+        {
+            console.log(`${attacker.name}'s ${move.name} hit!`);
+        }
 
         if (move.isStatus()) {
             this.ui.log(`${attacker.name} used ${move.name} (status): ${move.effectText}....coming soon`);
@@ -425,8 +456,7 @@ class Battle {
         const newPoke = team.splice(index, 1)[0];
         const oldPoke = player === 1 ? this.currentPoke1 : this.currentPoke2;
         // only put back the old poke into the team if it hasn't fainted
-        if (!oldPoke.isFainted())
-        {
+        if (!oldPoke.isFainted()) {
             team.push(oldPoke);
         }
 
@@ -487,8 +517,7 @@ async function fetchPokemon(name) {
             url: m.move.url
         }));
         const detailedMoves = await Promise.all(moves.map(async m => {
-            if (moveCache.has(m.url))
-            {
+            if (moveCache.has(m.url)) {
                 return moveCache.get(m.url);
             }
             const res = await fetch(m.url);
