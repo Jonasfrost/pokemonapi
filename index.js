@@ -118,37 +118,16 @@ function hpColorForPercent(pct) {
     return `rgb(${red.join(',')})`;
 }
 
-// Calculate miss chance
-function miss(move, attacker = null, defender = null, ui = null) {
-    if (!move) return false;
-
-    if (move.accuracy === null || typeof move.accuracy === 'undefined') return false;
-
-    const accuracy = Number(move.accuracy) || 0;
-
-    const acc = Math.max(0, Math.min(100, accuracy));
-
-    const roll = Math.floor(Math.random() * 100) + 1;
-
-    const didMiss = roll > acc;
-
-    if (didMiss && ui && typeof ui.log === 'function') {
-        if (attacker && defender) ui.log(`${attacker.name}'s ${move.name} missed ${defender.name}!`, 'gray');
-        else ui.log(`${move.name} missed!`, 'gray');
-    }
-
-    return didMiss;
-}
-
 // ------------------ CLASS DEFINITIONS ------------------
 class Move {
-    constructor({ name, power, type, damageClass, effectText, priority }) {
+    constructor({ name, power, type, damageClass, effectText, priority, accuracy }) {
         this.name = name;
         this.power = power || 0;
         this.type = type || null;
         this.damageClass = damageClass || 'status';
         this.effectText = effectText || '';
         this.priority = typeof priority === 'number' ? priority : 0;
+        this.accuracy = accuracy || 0;
     }
 
     isStatus() {
@@ -157,11 +136,29 @@ class Move {
 
     calculateDamage(attacker, defender, typeEffectiveness = 1) {
         if (this.isStatus()) return 0;
-        const stab = attacker.types.includes(this.type) ? 1.5 : 1;
-        return calculateDamage(50, attacker.stats.attack, this.power, defender.stats.defense, stab, typeEffectiveness);
+
+        // Default to 0 in case stats are missing
+        let attackStat = 0;
+        let defenseStat = 0;
+
+        if (this.damageClass === 'physical') {
+            attackStat = attacker.stats?.attack || 0;
+            defenseStat = defender.stats?.defense || 1; // avoid division by 0
+        } else if (this.damageClass === 'special') {
+            attackStat = attacker.stats?.['special-attack'] || 0;
+            defenseStat = defender.stats?.['special-defense'] || 1;
+        } else {
+            // status move → no damage
+            return 0;
+        }
+
+        const stab = attacker.types?.includes(this.type) ? 1.5 : 1;
+
+        // Debug log to verify stats
+        console.log(`${attacker.name} uses ${this.name} (${this.damageClass})`);
+
+        return calculateDamage(50, attackStat, this.power, defenseStat, stab, typeEffectiveness);
     }
-
-
 }
 
 class Pokemon {
@@ -230,7 +227,9 @@ class UI {
         pokemon.moves.forEach(move => {
             const btn = document.createElement('button');
             btn.textContent = move.name;
-            btn.title = move.isStatus() ? `Status: ${move.effectText}` : `Power: ${move.power} | Type: ${move.type} priority: ${move.priority}`;
+            btn.title = move.isStatus() ? `Status: ${move.effectText}` :
+                `| Power: ${move.power}\n| Type: ${move.type}\n| Priority: ${move.priority}\n| Accuracy: ${move.accuracy}\n| Damage class: ${move.damageClass}`;
+
             btn.onclick = () => Battle.instance.selectMove(player, move);
             container.appendChild(btn);
         });
@@ -407,8 +406,12 @@ class Battle {
         const defender = player === 1 ? this.currentPoke2 : this.currentPoke1;
 
         // Check if the move misses before proceeding
-        const didMiss = miss(move, attacker, defender, this.ui);
-        if (didMiss) {
+        let chance = Math.floor(Math.random() * 100) + 1;
+        let modAcc = move.accuracy * 2 - chance;
+      
+
+        if (modAcc < 10)
+        {
             move.power = 0;
             console.log(`${attacker.name}'s ${move.name} missed!`);
             this.ui.log(`${attacker.name}'s ${move.name} missed!`, 'gray');
@@ -522,13 +525,15 @@ async function fetchPokemon(name) {
             }
             const res = await fetch(m.url);
             const d = await res.json();
+
             const moveData = new Move({
                 name: m.name,
                 power: d.power,
                 type: d.type?.name,
                 damageClass: d.damage_class?.name,
                 effectText: d.effect_entries?.find(e => e.language.name === 'en')?.short_effect || '',
-                priority: d.priority || 0
+                priority: d.priority || 0,
+                accuracy: d.accuracy,
             });
             moveCache.set(m.url, moveData);
             return moveData;
