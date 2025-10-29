@@ -79,10 +79,6 @@ function parseAndApplyStatEffects(effectText, attacker, defender, playerWhoMoved
                 targetPoke = defender;
             }
         }
-        // verb indicates raise or lower
-        const lowers = /lower|decrease|decreases|lowered/.test(verb);
-        const delta = lowers ? -num : num;
-        applyStatChange(targetPoke, statKey, delta, ui);
     }
 }
 
@@ -120,14 +116,15 @@ function hpColorForPercent(pct) {
 
 // ------------------ CLASS DEFINITIONS ------------------
 class Move {
-    constructor({ name, power, type, damageClass, effectText, priority, accuracy }) {
+    constructor({ name, power, type, damageClass, effectText, priority, accuracy, statChange }) {
         this.name = name;
         this.power = power || 0;
         this.type = type || null;
         this.damageClass = damageClass || 'status';
         this.effectText = effectText || '';
         this.priority = typeof priority === 'number' ? priority : 0;
-        this.accuracy = accuracy || 0;
+        this.accuracy = accuracy || 100;
+        this.statChange = statChange || [];
     }
 
     isStatus() {
@@ -154,13 +151,10 @@ class Move {
 
         const stab = attacker.types?.includes(this.type) ? 1.5 : 1;
 
-        // Debug log to verify stats
-        console.log(`${attacker.name} uses ${this.name} (${this.damageClass})`);
-
         return calculateDamage(50, attackStat, this.power, defenseStat, stab, typeEffectiveness);
     }
 }
-
+ 
 class Pokemon {
     constructor({ name, sprite, stats, types, moves }) {
         this.name = name;
@@ -208,12 +202,18 @@ class UI {
         document.getElementById(`pokemonNameDisplay${player}`).textContent = pokemon.name;
         document.getElementById(`pokemonSprite${player}`).src = pokemon.sprite;
         const statsDiv = document.getElementById(`stats${player}`);
-        // show stat stages next to stat values
+        // show stat stages next to stat values and transient change marker
         statsDiv.innerHTML = Object.entries(pokemon.stats)
             .map(([k, v]) => {
                 const stage = pokemon.statStages && pokemon.statStages[k] ? pokemon.statStages[k] : 0;
                 const stageLabel = stage !== 0 ? ` (${stage > 0 ? '+' : ''}${stage})` : '';
-                return `${k.toUpperCase()}: ${v}${stageLabel}`;
+                // transient change label (shows +N or -N next to the stat for a moment)
+                let changeLabel = '';
+                if (pokemon._lastChange && pokemon._lastChange.statKey === k) {
+                    const d = pokemon._lastChange.delta || 0;
+                    if (d !== 0) changeLabel = ` <span class="stat-change ${d>0? 'stat-up' : 'stat-down'}">${d > 0 ? '+' : ''}${d}</span>`;
+                }
+                return `${k.toUpperCase()}: ${v}${stageLabel}${changeLabel}`;
             })
             .join('<br>');
         document.getElementById(`type${player}`).textContent = `Type: ${pokemon.types.join(' / ')}`;
@@ -227,8 +227,8 @@ class UI {
         pokemon.moves.forEach(move => {
             const btn = document.createElement('button');
             btn.textContent = move.name;
-            btn.title = move.isStatus() ? `Status: ${move.effectText}` :
-                `| Power: ${move.power}\n| Type: ${move.type}\n| Priority: ${move.priority}\n| Accuracy: ${move.accuracy}\n| Damage class: ${move.damageClass}`;
+            btn.title = move.isStatus() ? `Accuracy: ${move.accuracy}\n${move.effectText}` :
+                `| Power: ${move.power}\n| Type: ${move.type}\n| Accuracy: ${move.accuracy}\n| Priority: ${move.priority}\n| Damage class: ${move.damageClass}\n| ${move.effectText}`;
 
             btn.onclick = () => Battle.instance.selectMove(player, move);
             container.appendChild(btn);
@@ -361,6 +361,37 @@ class Battle {
             return;
         }
 
+        // for player 1's move
+        if (Array.isArray(move1?.statChange) && move1.statChange.length > 0) {
+            move1.statChange.forEach(sc => {
+                const raw = sc?.stat?.name ?? sc?.stat ?? '(unknown)';
+                const delta = sc?.change ?? 0;
+                const targetStr = sc?.target?.name ?? sc?.target ?? move1.target?.name ?? move1.target ?? 'selected-pokemon';
+                const targetPoke = /user|self|owner/i.test(targetStr) ? this.currentPoke1 : this.currentPoke2;
+                console.log(`P1: ${move1.name} -> stat:${raw}, change:${delta > 0 ? '+' : ''}${delta}, targetStr:${targetStr}, targetPokemon:${targetPoke.name}`);
+            });
+        } 
+
+        // for player 2's move
+        if (Array.isArray(move2?.statChange) && move2.statChange.length > 0) {
+            move2.statChange.forEach(sc => {
+                const raw = sc?.stat?.name ?? sc?.stat ?? '(unknown)';
+                const delta = sc?.change ?? 0;
+                const targetStr = sc?.target?.name ?? sc?.target ?? move2.target?.name ?? move2.target ?? 'selected-pokemon';
+                const targetPoke = /user|self|owner/i.test(targetStr) ? this.currentPoke2 : this.currentPoke1;
+                console.log(`P2: ${move2.name} -> stat:${raw}, change:${delta > 0 ? '+' : ''}${delta}, targetStr:${targetStr}, targetPokemon:${targetPoke.name}`);
+            });
+        }
+
+        if () {
+            console.log("select a target");
+        }
+        else
+        {
+            console.log("no target selection");
+        }
+
+        // Calculate move order
         if (move1 && move2) {
             const prio1 = move1.priority || 0;
             const prio2 = move2.priority || 0;
@@ -413,17 +444,12 @@ class Battle {
         if (modAcc < 10)
         {
             move.power = 0;
-            console.log(`${attacker.name}'s ${move.name} missed!`);
             this.ui.log(`${attacker.name}'s ${move.name} missed!`, 'gray');
             return;
         }
-        else
-        {
-            console.log(`${attacker.name}'s ${move.name} hit!`);
-        }
 
         if (move.isStatus()) {
-            this.ui.log(`${attacker.name} used ${move.name} (status): ${move.effectText}....coming soon`);
+            this.ui.log(`${attacker.name} used ${move.name}: ${move.effectText}....coming soon`);
             // parse and apply any stat effects from the status move
             parseAndApplyStatEffects(move.effectText, attacker, defender, player, this.ui);
             return;
@@ -534,6 +560,7 @@ async function fetchPokemon(name) {
                 effectText: d.effect_entries?.find(e => e.language.name === 'en')?.short_effect || '',
                 priority: d.priority || 0,
                 accuracy: d.accuracy,
+                statChange: d.stat_changes || null
             });
             moveCache.set(m.url, moveData);
             return moveData;
@@ -583,7 +610,10 @@ async function randomizeTeam(player) {
 
 // ------------------ GLOBAL SWITCH BUTTONS ------------------
 window.manualSwitch = (player) => {
-    if (Battle.instance) Battle.instance.manualSwitch(player);
+    if (Battle.instance)
+    {
+        Battle.instance.manualSwitch(player);
+    }
 }
 
-console.log("simon was here"); 
+console.log("simon was here");
