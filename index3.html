@@ -1,0 +1,40 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <!--
+      Index2.html: vindue der viser en brugers egne Pokemons
+      - Indeholder kun markup og loader `script.js` (ingen inline JS)
+      - Forventes at blive åbnet i et nyt vindue fra hovedsiden
+    -->
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <h1 id="h1Index2">Your Pokemons</h1>
+    <!-- Container til brugerens Pokemons -->
+    <div class="userRow" id="userRow"></div>
+    <div id="myDropdown" class="dropdown-content">
+    </div>
+
+    <div id="teamPlace" class="team"></div>
+
+
+    <div id="starter-Pokemon" class="starter-Pokemons">
+        <p>Choose a generation to pick a starter pokemon from</p>
+        <button onclick="fetchGeneration(1)">Generation 1. Kanto</button>
+        <button onclick="fetchGeneration(2)">Generation 2. Johto</button>
+        <button onclick="fetchGeneration(3)">Generation 3. Hoenn</button>
+        <button onclick="fetchGeneration(4)">Generation 4. Sinnoh</button>
+        <button onclick="fetchGeneration(5)">Generation 5. Unova</button>
+        <button onclick="fetchGeneration(6)">Generation 6. Kalos</button>
+        <button onclick="fetchGeneration(7)">Generation 7. Alola</button>
+        <button onclick="fetchGeneration(8)">Generation 8. Galar</button>
+        <button onclick="fetchGeneration(9)">Generation 9. Paldea</button>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

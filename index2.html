@@ -1,0 +1,99 @@
+﻿<!--
+  Index (forside)
+  - Indeholder start-knapper (Fight/Login) og containeren med tre pokemon-kort
+  - Al JavaScript ligger i `script.js` (ingen inline JS ønsket)
+  - Styles hentes fra `styles.css`
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Start-knapper: Fight åbner en anden side, Login åbner login-panelet -->
+    <div class="start-buttons" id="start-buttons">
+        <a href="C:\Users\LOPO\source\repos\pokemonapi\index.html" target="_blank"><img src="https://github.com/Lpopp30/ApiPokemon/blob/main/original-dbe29920e290da99d214598ac9e2001f.jpg?raw=true" alt="Pokeball" id="fightButton"></a>
+        <a onclick="openLogin()"><img src="https://github.com/Lpopp30/ApiPokemon/blob/main/original-dbe29920e290da99d214598ac9e2001f.jpg?raw=true" alt="Pokeball" id="loginButton"></a>
+    </div>
+    <div class="login" id="login">
+        <h1>Login</h1>
+        <form>
+            <button type="button" onclick="closeLogin()" class="closeButton">X</button>
+            <label for="userName">Username</label><br>
+            <input type="text" id="userName" name="userName"><br>
+            <label for="password">Password</label><br>
+            <input type="password" id="password" name="password"><br>
+            <button type="button" onclick="loginData(userName, password, 'Login')" name="login" value="login">Login</button>
+            <button type="button" onclick="loginData(userName, password, 'Register')" name="register" value="register">Register</button>
+        </form>
+    </div>
+
+    <div class="row" id="row">
+        <div class="pokemoncard">
+            <h3 class="heading">
+                <span id="2namePokemon" class="PokeName"></span>
+                <span id="2hpPokemon"></span>
+                <img id="2typeSymbol" alt="Symbol Image" class="types" />
+                <img id="22typeSymbol" alt="Symbol Image" class="types2" />
+            </h3>
+            <img id="2pokemonImage" alt="Pokemon Image" class="sprites" />
+            <div class="infoBar">
+                <span id="2idPokemon"></span>
+                <span id="2HTPokemon"></span>
+                <span id="2WTPokemon"></span>
+            </div>
+            <p id="2attackPokemon"></p>
+            <p id="2defensePokemon"></p>
+            <p id="2specialAPokemon"></p>
+            <p id="2specialDPokemon"></p>
+            <p id="2speedPokemon"></p>
+            <p id="2typePokemon"></p>
+        </div>
+        <div class="pokemoncard">
+            <h3 class="heading">
+                <span id="3namePokemon" class="PokeName"></span>
+                <span id="3hpPokemon"></span>
+                <img id="3typeSymbol" alt="Symbol Image" class="types" />
+                <img id="32typeSymbol" alt="Symbol Image" class="types2" />
+            </h3>
+            <img id="3pokemonImage" alt="Pokemon Image" class="sprites" />
+            <div class="infoBar">
+                <span id="3idPokemon"></span>
+                <span id="3HTPokemon"></span>
+                <span id="3WTPokemon"></span>
+            </div>
+            <p id="3attackPokemon"></p>
+            <p id="3defensePokemon"></p>
+            <p id="3specialAPokemon"></p>
+            <p id="3specialDPokemon"></p>
+            <p id="3speedPokemon"></p>
+            <p id="3typePokemon"></p>
+        </div>
+        <div class="pokemoncard">
+            <h3 class="heading">
+                <span id="1namePokemon" class="PokeName"></span>
+                <span id="1hpPokemon"></span>
+                <img id="1typeSymbol" alt="Symbol Image" class="types" />
+                <img id="12typeSymbol" alt="Symbol Image" class="types2" />
+            </h3>
+            <img id="1pokemonImage" alt="Pokemon Image" class="sprites" />
+            <div class="infoBar">
+                <span id="1idPokemon"></span>
+                <span id="1HTPokemon"></span>
+                <span id="1WTPokemon"></span>
+            </div>
+            <p id="1attackPokemon"></p>
+            <p id="1defensePokemon"></p>
+            <p id="1specialAPokemon"></p>
+            <p id="1specialDPokemon"></p>
+            <p id="1speedPokemon"></p>
+            <p id="1typePokemon"></p>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

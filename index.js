@@ -1,12 +1,15 @@
-﻿// ------------------ UTILITY FUNCTIONS ------------------
+﻿// ------------------ UTILITY FUNCTIONS ------------------ \\
+let newStat = 0;
+let attackMultiplier = 1;
+let defenseMultiplier = 1;
+
 function calculateStat(base, level = 50, iv = 31, ev = 0, isHP = false) {
     if (isHP) return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + level + 10;
     return Math.floor(((2 * base + iv + Math.floor(ev / 4)) * level) / 100) + 5;
 }
-
 function calculateDamage(level, attackStat, power, defenseStat, stab = 1, typeEffectiveness = 1) {
     const randomFactor = Math.floor(Math.random() * (100 - 85 + 1)) + 85;
-    const baseDamage = ((((2 * level) / 5 + 2) * attackStat * power / defenseStat) / 50) + 2;
+    const baseDamage = ((((2 * level) / 5 + 2) * (attackStat * attackMultiplier) * power / (defenseStat * defenseMultiplier)) / 50) + 2;
     return Math.floor(baseDamage * stab * typeEffectiveness * randomFactor / 100);
 }
 
@@ -114,7 +117,7 @@ function hpColorForPercent(pct) {
     return `rgb(${red.join(',')})`;
 }
 
-// ------------------ CLASS DEFINITIONS ------------------
+// ------------------ CLASS DEFINITIONS ------------------ \\
 class Move {
     constructor({ name, power, type, damageClass, effectText, priority, accuracy, statChange }) {
         this.name = name;
@@ -154,7 +157,7 @@ class Move {
         return calculateDamage(50, attackStat, this.power, defenseStat, stab, typeEffectiveness);
     }
 }
- 
+
 class Pokemon {
     constructor({ name, sprite, stats, types, moves }) {
         this.name = name;
@@ -211,7 +214,7 @@ class UI {
                 let changeLabel = '';
                 if (pokemon._lastChange && pokemon._lastChange.statKey === k) {
                     const d = pokemon._lastChange.delta || 0;
-                    if (d !== 0) changeLabel = ` <span class="stat-change ${d>0? 'stat-up' : 'stat-down'}">${d > 0 ? '+' : ''}${d}</span>`;
+                    if (d !== 0) changeLabel = ` <span class="stat-change ${d > 0 ? 'stat-up' : 'stat-down'}">${d > 0 ? '+' : ''}${d}</span>`;
                 }
                 return `${k.toUpperCase()}: ${v}${stageLabel}${changeLabel}`;
             })
@@ -361,35 +364,9 @@ class Battle {
             return;
         }
 
-        // for player 1's move
-        if (Array.isArray(move1?.statChange) && move1.statChange.length > 0) {
-            move1.statChange.forEach(sc => {
-                const raw = sc?.stat?.name ?? sc?.stat ?? '(unknown)';
-                const delta = sc?.change ?? 0;
-                const targetStr = sc?.target?.name ?? sc?.target ?? move1.target?.name ?? move1.target ?? 'selected-pokemon';
-                const targetPoke = /user|self|owner/i.test(targetStr) ? this.currentPoke1 : this.currentPoke2;
-                console.log(`P1: ${move1.name} -> stat:${raw}, change:${delta > 0 ? '+' : ''}${delta}, targetStr:${targetStr}, targetPokemon:${targetPoke.name}`);
-            });
-        } 
-
-        // for player 2's move
-        if (Array.isArray(move2?.statChange) && move2.statChange.length > 0) {
-            move2.statChange.forEach(sc => {
-                const raw = sc?.stat?.name ?? sc?.stat ?? '(unknown)';
-                const delta = sc?.change ?? 0;
-                const targetStr = sc?.target?.name ?? sc?.target ?? move2.target?.name ?? move2.target ?? 'selected-pokemon';
-                const targetPoke = /user|self|owner/i.test(targetStr) ? this.currentPoke2 : this.currentPoke1;
-                console.log(`P2: ${move2.name} -> stat:${raw}, change:${delta > 0 ? '+' : ''}${delta}, targetStr:${targetStr}, targetPokemon:${targetPoke.name}`);
-            });
-        }
-
-        if () {
-            console.log("select a target");
-        }
-        else
-        {
-            console.log("no target selection");
-        }
+        // process stat changes (secondary effects) declared on each move
+        if (move1) this.processStatChangesForMove(1, move1);
+        if (move2) this.processStatChangesForMove(2, move2);
 
         // Calculate move order
         if (move1 && move2) {
@@ -439,10 +416,9 @@ class Battle {
         // Check if the move misses before proceeding
         let chance = Math.floor(Math.random() * 100) + 1;
         let modAcc = move.accuracy * 2 - chance;
-      
 
-        if (modAcc < 10)
-        {
+
+        if (modAcc < 10) {
             move.power = 0;
             this.ui.log(`${attacker.name}'s ${move.name} missed!`, 'gray');
             return;
@@ -528,9 +504,82 @@ class Battle {
             if (this.selectedMoves[1] && this.selectedMoves[2]) this.executeTurn();
         }, false);
     }
+
+    // Moved out of executeTurn: properly defined class method to apply stat changes from move.statChange
+    processStatChangesForMove(player, move) {
+        if (!move || !Array.isArray(move.statChange) || move.statChange.length === 0) return;
+
+        const attacker = player === 1 ? this.currentPoke1 : this.currentPoke2;
+        const defender = player === 1 ? this.currentPoke2 : this.currentPoke1;
+
+        move.statChange.forEach(sc => {
+            const raw = sc?.stat?.name ?? sc?.stat ?? '(unknown)';
+            const delta = sc?.change ?? 0;
+            const targetStr = sc?.target?.name ?? sc?.target ?? move.target?.name ?? move.target ?? 'selected-pokemon';
+            console.log(` ${move.name}: ${targetStr} ${raw} by ${delta}`);
+
+            const useAttacker = /user|self|owner/i.test(targetStr);
+            const targetPoke = useAttacker ? attacker : defender;
+            const targetPlayer = targetPoke === this.currentPoke1 ? 1 : 2;
+
+            const statKey = normalizeStatName(raw);
+            if (!statKey || !(statKey in targetPoke.statStages)) {
+                console.log(`Unknown stat '${raw}' from move ${move.name}`);
+                return;
+            }
+            if (targetStr === "selected-pokemon")
+            {
+                console.log("select a target");
+            }
+
+            // Calculate new stat
+            const prevStage = targetPoke.statStages[statKey] || 0;
+            // clamp stages to -6 <-> +6
+            const newStage = Math.max(-6, Math.min(6, prevStage + delta));
+            const appliedDelta = newStage - prevStage;
+            targetPoke.statStages[statKey] = newStage;
+            // transient UI marker used by renderPokemon
+            targetPoke._lastChange = { statKey, delta: appliedDelta };
+
+            // log and re-render only the affected pokemon
+            if (appliedDelta !== 0) {
+                const dir = appliedDelta > 0 ? 'rose' : 'fell';
+                this.ui.log(`${targetPoke.name}'s ${statKey} ${dir} by ${Math.abs(appliedDelta)}.`);
+            } else {
+                this.ui.log(`${targetPoke.name}'s ${statKey} did not change.`);
+            }
+            this.ui.renderPokemon(targetPoke, targetPlayer);
+
+            let statMultiplier = (2 + newStage) / 2;
+            newStat = Math.floor(targetPoke.stats[statKey] * statMultiplier);
+
+            if (appliedDelta > 0) {
+
+                if (statKey === 'attack')
+                {
+                    attackMultiplier = (2 + newStage) / 2;
+                }
+                else if (statKey === 'defense')
+                {
+                    defenseMultiplier = (2 + newStage) / 2;
+                }
+            }
+            else
+            {
+                if (statKey === 'attack')
+                {
+                    attackMultiplier = 2 / (2 - newStage);
+                }
+                else if (statKey === 'defense')
+                {
+                    defenseMultiplier = 2 / (2 - newStage);
+                }
+            }
+        });
+    }
 }
 
-// ------------------ FETCH FUNCTIONS ------------------
+// ------------------ FETCH FUNCTIONS ------------------ \\
 const moveCache = new Map();
 
 async function fetchPokemon(name) {
@@ -576,7 +625,7 @@ async function fetchPokemon(name) {
     } catch { return null; }
 }
 
-// ------------------ TEAM SUBMISSION ------------------
+// ------------------ TEAM SUBMISSION ------------------ \\
 async function submitTeam(player) {
     const team = [];
     for (let i = 1; i <= 6; i++) {
@@ -608,10 +657,9 @@ async function randomizeTeam(player) {
     }
 }
 
-// ------------------ GLOBAL SWITCH BUTTONS ------------------
+// ------------------ GLOBAL SWITCH BUTTONS ------------------ \\
 window.manualSwitch = (player) => {
-    if (Battle.instance)
-    {
+    if (Battle.instance) {
         Battle.instance.manualSwitch(player);
     }
 }
